@@ -1,0 +1,26 @@
+{
+  "experiment": "Exp1 — Pop. Pequena / Mutação Alta",
+  "hyperparameters": {
+    "C": 1,
+    "penalty": "l2",
+    "solver": "lbfgs",
+    "max_iter": 1000,
+    "class_weight": "balanced",
+    "random_state": 42
+  },
+  "features": [
+    "area_pior",
+    "textura_pior",
+    "pontos_concavos_pior",
+    "concavidade_pior"
+  ],
+  "metrics": {
+    "accuracy": 0.9649122807017544,
+    "precision": 0.975,
+    "recall": 0.9285714285714286,
+    "f1": 0.9512195121951219,
+    "roc_auc": 0.9976851851851852
+  },
+  "trained_at": "2026-07-13T13:35:55.901099",
+  "model_file": "cancer_model.joblib"
+}
