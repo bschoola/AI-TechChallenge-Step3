@@ -117,6 +117,15 @@ class AnamneseResponse(BaseModel):
     conduta: str | None = None
 
 
+class VisaoGeralResponse(BaseModel):
+    pontos_relevantes: list[str]
+    pontos_atencao: list[str]
+    fontes: list[str]
+    alerta: str | None = None
+    requer_validacao_humana: bool
+    status: str
+
+
 @app.get("/")
 def root():
     return {"status": "ok", "docs": "/docs"}
@@ -178,6 +187,53 @@ def get_patient_anamnesis(paciente_id: int) -> AnamneseResponse:
             detail=f"Paciente {paciente_id} nao possui anamnese registrada.",
         )
     return AnamneseResponse(**anamnese)
+
+
+@app.post("/patients/{paciente_id}/overview", response_model=VisaoGeralResponse)
+def get_patient_overview(paciente_id: int) -> VisaoGeralResponse:
+    """Visao geral automatica gerada por IA para a tela do paciente: sintetiza a
+    anamnese e os exames em pontos relevantes e pontos de atencao, sem repetir a
+    ficha inteira (diferente de POST /assistant/ask, que responde a uma pergunta
+    livre do medico). Usa o mesmo grafo do assistente (agent/graph.py) com
+    tipo_interacao="visao_geral", que seleciona o no gerar_visao_geral em vez de
+    buscar_contexto_rag_e_gerar_resposta - ver agent/nodes.py.
+
+    Mesma convencao de erros de POST /assistant/ask: 503 quando uma dependencia
+    (RAG/adapter fine-tuned) ainda nao esta pronta, 500 para o resto. 404 se o
+    paciente nao existir.
+    """
+    if not tools.paciente_existe(paciente_id):
+        raise HTTPException(status_code=404, detail=f"Paciente {paciente_id} nao encontrado.")
+
+    try:
+        result = _graph_app.invoke({"paciente_id": paciente_id, "tipo_interacao": "visao_geral"})
+    except FileNotFoundError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "O assistente ainda nao esta pronto: falta gerar um artefato "
+                f"necessario (indice do RAG ou adapter fine-tuned). Detalhe: {exc}"
+            ),
+        ) from exc
+    except NotImplementedError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Uma parte do pipeline do assistente ainda nao foi implementada "
+                f"(ver agent/nodes.py). Detalhe tecnico: {exc!r}"
+            ),
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - resposta de erro generica de proposito
+        raise HTTPException(status_code=500, detail=f"Erro inesperado ao gerar visao geral: {exc}") from exc
+
+    return VisaoGeralResponse(
+        pontos_relevantes=result.get("pontos_relevantes", []),
+        pontos_atencao=result.get("pontos_atencao", []),
+        fontes=result.get("fontes", []),
+        alerta=result.get("alerta"),
+        requer_validacao_humana=result["requer_validacao_humana"],
+        status=result["status"],
+    )
 
 
 @app.get("/exams/{exame_id}", response_model=ExameDetailResponse)

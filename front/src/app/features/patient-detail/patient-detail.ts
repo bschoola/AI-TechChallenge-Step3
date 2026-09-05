@@ -12,7 +12,7 @@ import { PatientService } from '../../core/services/patient';
 import { ExamService } from '../../core/services/exam';
 import { Patient } from '../../core/models/patient.model';
 import { ExamSummary } from '../../core/models/exam.model';
-import { AskResponse } from '../../core/models/assistant.model';
+import { OverviewResponse } from '../../core/models/assistant.model';
 
 import { AnamnesisCard } from './components/anamnesis-card/anamnesis-card';
 import { ConcernAlertBanner } from './components/concern-alert-banner/concern-alert-banner';
@@ -55,7 +55,7 @@ export class PatientDetail {
   readonly examsLoading = signal(true);
   readonly examsError = signal<string | null>(null);
 
-  readonly overviewResponse = signal<AskResponse | null>(null);
+  readonly overviewResponse = signal<OverviewResponse | null>(null);
 
   readonly pendentesCount = computed(
     () => this.exams().filter((e) => e.status === 'pendente').length,
@@ -92,7 +92,7 @@ export class PatientDetail {
       });
   }
 
-  onOverview(response: AskResponse | null): void {
+  onOverview(response: OverviewResponse | null): void {
     this.overviewResponse.set(response);
   }
 

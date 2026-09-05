@@ -57,6 +57,65 @@
   margin: 0 0 0.75rem;
 }
 
+.overview-section {
+  margin: 0 0 0.9rem;
+
+  &:last-of-type {
+    margin-bottom: 0.75rem;
+  }
+}
+
+.overview-section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.4rem;
+
+  mat-icon {
+    font-size: 16px;
+    height: 16px;
+    width: 16px;
+  }
+
+  &.relevant {
+    color: #0f7c8c;
+  }
+
+  &.attention {
+    color: #a15c00;
+  }
+}
+
+.overview-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.87rem;
+  line-height: 1.5;
+  color: #26424c;
+
+  li {
+    margin-bottom: 0.3rem;
+  }
+
+  li:last-child {
+    margin-bottom: 0;
+  }
+
+  &.attention li::marker {
+    color: #a15c00;
+  }
+}
+
+.overview-empty {
+  font-size: 0.85rem;
+  color: #5c7a85;
+  margin: 0 0 0.75rem;
+}
+
 .overview-sources {
   display: flex;
   align-items: center;

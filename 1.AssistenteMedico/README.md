@@ -72,6 +72,7 @@ uvicorn api.main:app --reload --port 8001
 | `GET` | `/patients` | Lista pacientes do prontuário mock (com sexo, data de nascimento e idade); aceita `?nome=` para filtrar por parte do nome (case-insensitive) |
 | `GET` | `/patients/{paciente_id}/exams` | Lista os exames do paciente com status, data de solicitação e data de realização; 404 se o paciente não existir |
 | `GET` | `/exams/{exame_id}` | Detalhe completo de um exame (status, datas, resultado, médico solicitante, observações); 404 se não existir |
+| `GET` | `/patients/{paciente_id}/anamnesis` | Ficha de anamnese completa do paciente (queixa principal, históricos, hábitos, sinais vitais, exame físico, hipótese diagnóstica e conduta); 404 se o paciente não existir ou não tiver anamnese registrada |
 | `POST` | `/assistant/ask` | Pergunta do médico (`paciente_id` + `pergunta`) → resposta do assistente |
 
 `GET /patients` existe para o médico localizar o `paciente_id` (usado em `/assistant/ask`) sem precisar consultar o banco diretamente. Exemplos:
@@ -81,9 +82,10 @@ curl http://localhost:8001/patients                 # lista todos
 curl "http://localhost:8001/patients?nome=ficticio"  # filtra por parte do nome
 curl http://localhost:8001/patients/1/exams          # exames do paciente 1, com status
 curl http://localhost:8001/exams/1                   # detalhe completo do exame 1
+curl http://localhost:8001/patients/1/anamnesis      # ficha de anamnese completa do paciente 1
 ```
 
-> Se você já tinha rodado o projeto antes dos campos de exame (`data_solicitacao`, `data_realizacao`, `resultado`, `medico_solicitante`, `observacoes`) ou de paciente (`sexo`, `data_nascimento`) existirem, não precisa apagar o `prontuarios_mock.db` — `init_mock_db()` migra as tabelas automaticamente na próxima vez que a API subir.
+> Se você já tinha rodado o projeto antes dos campos de exame (`data_solicitacao`, `data_realizacao`, `resultado`, `medico_solicitante`, `observacoes`), de paciente (`sexo`, `data_nascimento`) ou da tabela `anamnese` existirem, não precisa apagar o `prontuarios_mock.db` — `init_mock_db()` cria/migra as tabelas e preenche a ficha de anamnese semente automaticamente na próxima vez que a API subir.
 >
 > Nota de design: `idade` não é uma coluna do banco — ela é calculada na hora a partir de `data_nascimento` (`agent/tools.py::_calcular_idade`) toda vez que um paciente é retornado, em vez de ficar guardada e desatualizar com o tempo.
 

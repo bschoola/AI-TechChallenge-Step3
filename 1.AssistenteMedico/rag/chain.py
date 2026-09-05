@@ -172,3 +172,48 @@ def ask(question: str, patient_context: str | None = None) -> RagResponse:
 
     fontes = sorted({doc.metadata.get("fonte", "desconhecida") for doc in docs})
     return RagResponse(answer=resposta.strip(), sources=fontes)
+
+
+# Formato de saida pedido para a "visao geral" automatica (agent/nodes.py::
+# gerar_visao_geral) — marcadores fixos em vez de prosa livre, para
+# agent/nodes.py::_parse_overview_sections conseguir quebrar a resposta em duas
+# listas (mais robusto do que pedir JSON a um modelo pequeno servido por um
+# pipeline `text-generation` simples, sem JSON mode).
+OVERVIEW_INSTRUCTION = (
+    "Gere uma visao geral clinica deste paciente para a equipe medica, SEM repetir "
+    "textualmente os dados que ja aparecem na ficha de anamnese. Com base apenas no "
+    "contexto do paciente abaixo, produza dois blocos curtos:\n"
+    "RELEVANTE: pontos que resumem o caso (ate 5 itens)\n"
+    "ATENCAO: riscos e pontos que a equipe deve observar - anormalidades, exames "
+    "pendentes, alergias, interacoes medicamentosas, divergencias entre historico e "
+    "conduta (ate 5 itens; se nao houver nenhum, escreva apenas 'Nenhum ponto de "
+    "atencao identificado.')\n\n"
+    "Responda EXATAMENTE nesse formato: as duas palavras 'RELEVANTE:' e 'ATENCAO:' "
+    "em linhas separadas, cada uma seguida so de itens em lista iniciados por '-'. "
+    "Nao escreva nada fora desses dois blocos."
+)
+
+
+def ask_overview(patient_context: str) -> RagResponse:
+    """Ponto de entrada usado pelo no `gerar_visao_geral` do LangGraph (agent/
+    nodes.py), para a "visao geral" automatica da tela do paciente.
+
+    Diferente de ask(): nao ha uma pergunta livre do medico (so o contexto clinico
+    do paciente), e deliberadamente NAO faz retrieval de protocolos via RAG - o
+    insumo aqui e o caso do paciente, nao os protocolos internos do hospital.
+    """
+    chain = _get_chain()
+    llm = chain["llm"]
+    tokenizer = chain["tokenizer"]
+
+    user_content = f"Dados clinicos do paciente:\n{patient_context}\n\n{OVERVIEW_INSTRUCTION}"
+
+    messages = [
+        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "user", "content": user_content},
+    ]
+    prompt = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+
+    resposta = llm.invoke(prompt)
+
+    return RagResponse(answer=resposta.strip(), sources=[])

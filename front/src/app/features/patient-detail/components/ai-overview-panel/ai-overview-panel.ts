@@ -13,14 +13,15 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatTooltipModule } from '@angular/material/tooltip';
 
-import { AssistantService, VISAO_GERAL_PROMPT } from '../../../../core/services/assistant';
-import { AskResponse } from '../../../../core/models/assistant.model';
+import { AssistantService } from '../../../../core/services/assistant';
+import { OverviewResponse } from '../../../../core/models/assistant.model';
 
 /**
- * Ao receber um patientId, chama automaticamente POST /assistant/ask com um
- * prompt fixo de "visão geral" (anamnese, exames recentes, sugestões e pontos
- * de preocupação), e emite `overview` para o pai renderizar o alerta visual
- * no topo da tela quando aplicável.
+ * Ao receber um patientId, chama automaticamente POST /patients/{id}/overview,
+ * que devolve uma síntese já estruturada em pontos relevantes e pontos de atenção
+ * (em vez de um parágrafo livre) — ver AssistantService.getOverview e
+ * agent/nodes.py::gerar_visao_geral no backend. Emite `overview` para o pai
+ * renderizar o alerta visual no topo da tela quando aplicável.
  */
 @Component({
   selector: 'app-ai-overview-panel',
@@ -39,10 +40,10 @@ export class AiOverviewPanel {
   private readonly assistantService = inject(AssistantService);
 
   readonly patientId = input.required<number>();
-  readonly overview = output<AskResponse | null>();
+  readonly overview = output<OverviewResponse | null>();
 
   readonly loading = signal(true);
-  readonly response = signal<AskResponse | null>(null);
+  readonly response = signal<OverviewResponse | null>(null);
   readonly errorMessage = signal<string | null>(null);
 
   constructor() {
@@ -67,7 +68,7 @@ export class AiOverviewPanel {
     this.response.set(null);
     this.overview.emit(null);
 
-    this.assistantService.ask({ paciente_id: patientId, pergunta: VISAO_GERAL_PROMPT }).subscribe({
+    this.assistantService.getOverview(patientId).subscribe({
       next: (res) => {
         if (isCancelled()) return;
         this.response.set(res);

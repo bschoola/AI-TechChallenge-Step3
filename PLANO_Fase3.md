@@ -67,22 +67,28 @@ receber_paciente
 verificar_exames_pendentes ──(pendente)──► emitir_alerta_exame ─┐
       │ (sem pendência)                                          │
       ▼                                                          │
-buscar_contexto_rag  ◄────────────────────────────────────────────┘
+rotear_geracao  ◄──────────────────────────────────────────────────┘
       │
-      ▼
-gerar_resposta_llm  (fine-tuned model + contexto RAG)
-      │
-      ▼
-validar_seguranca (guardrails) ──(bloqueado)──► encaminhar_para_validacao_humana
-      │ (aprovado)                                        │
-      ▼                                                    │
-finalizar_resposta  ◄───────────────────────────────────────┘
-      │
-      ▼
-log_auditoria (sempre executa, registra tudo)
+      ├──(tipo_interacao="chat")───────► buscar_contexto_rag_e_gerar_resposta ─┐
+      │                                   (retrieval RAG + fine-tuned model,    │
+      │                                    responde a pergunta livre do médico) │
+      │                                                                        │
+      └──(tipo_interacao="visao_geral")► gerar_visao_geral ────────────────────┤
+                                          (sem retrieval; sintetiza anamnese/   │
+                                           exames em pontos RELEVANTE/ATENÇÃO)  │
+                                                                                ▼
+                                                    validar_seguranca (guardrails) ──(bloqueado)──► encaminhar_para_validacao_humana
+                                                          │ (aprovado)                                        │
+                                                          ▼                                                    │
+                                                    finalizar_resposta  ◄───────────────────────────────────────┘
+                                                          │
+                                                          ▼
+                                                    log_auditoria (sempre executa, registra tudo)
 ```
 
 Cada nó é uma função Python simples (`state -> state`) — é exatamente o desenho que o PDF pede quando fala em "ao receber informações sobre um paciente, o sistema possa acionar diferentes etapas".
+
+**Dois tipos de interação, um grafo só (atualizado após feedback do usuário sobre o card "Visão geral da IA"):** inicialmente a visão geral automática da tela do paciente reusava o mesmo nó de geração do chat, só trocando a pergunta por um prompt fixo pedindo para "revisar a anamnese" — só que aí o modelo (pequeno, fine-tuned majoritariamente em QA factual) tendia a parafrasear de volta a própria ficha de anamnese, que já está visível do lado esquerdo da tela, em vez de destacar o que é clinicamente relevante. A correção foi introduzir o campo `tipo_interacao` no estado (`"chat"` por padrão, ou `"visao_geral"`) e um nó de geração dedicado (`gerar_visao_geral`, sem retrieval de protocolos), escolhido por uma aresta condicional em `rotear_geracao` — reaproveitando os nós comuns (checagem de exame pendente, guardrails, validação humana, log de auditoria) em vez de duplicar o pipeline inteiro. O prompt de `gerar_visao_geral` pede um formato de saída com marcadores fixos (`RELEVANTE:`/`ATENCAO:`), que o backend quebra em duas listas (`agent/nodes.py::_parse_overview_sections`) — mais robusto do que confiar em JSON estruturado vindo de um pipeline `text-generation` simples, sem JSON mode. Exposto via `POST /patients/{id}/overview` (ver seção 2.7 e 4), endpoint separado de `POST /assistant/ask` porque a visão geral não é uma pergunta do médico.
 
 ### 2.6 Segurança, guardrails e explainability
 
@@ -160,7 +166,8 @@ Módulo único do repositório, `1.AssistenteMedico/`:
 │   ├── guardrails.py              # filtro de prescrição + validação de segurança
 │   └── tools.py                   # tool de consulta ao prontuário (SQLite)
 ├── api/
-│   └── main.py                    # FastAPI expõe POST /assistant/ask
+│   └── main.py                    # FastAPI: POST /assistant/ask (chat) e
+│                                   #   POST /patients/{id}/overview (visão geral estruturada)
 ├── logs/
 │   └── audit.jsonl                # gerado em runtime, git-ignorado
 └── tests/
@@ -209,7 +216,7 @@ Todos os componentes descritos na seção 4 estão implementados em `1.Assistent
 - `finetuning/train_qlora.py` — implementado com dois caminhos: QLoRA 4-bit real (GPU/CUDA) ou LoRA sem quantização como fallback de CPU (mais lento, mas funciona com RAM suficiente). `finetuning/train_qlora_colab.ipynb` cobre o caminho recomendado (Colab, GPU T4 gratuita).
 - `finetuning/evaluate.py` — único item ainda pendente (comparação formal base vs. fine-tuned para o relatório técnico); não faz parte do caminho de execução da API.
 
-Próximos passos: rodar o fine-tuning e o `rag/ingest.py` de ponta a ponta no seu ambiente (gera o adapter LoRA e o índice Chroma reais), confirmar o endpoint `/assistant/ask` respondendo com um caso real, implementar `evaluate.py`, e então partir para o relatório técnico e o vídeo demo.
+Próximos passos: rodar o fine-tuning e o `rag/ingest.py` de ponta a ponta no seu ambiente (gera o adapter LoRA e o índice Chroma reais), confirmar os endpoints `/assistant/ask` e `/patients/{id}/overview` respondendo com um caso real, implementar `evaluate.py`, e então partir para o relatório técnico e o vídeo demo.
 
 ## 8. Riscos e pontos de atenção
 

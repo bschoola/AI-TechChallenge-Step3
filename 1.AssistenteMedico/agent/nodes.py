@@ -3,6 +3,7 @@ retorna o dicionario de estado do LangGraph (ver AgentState em graph.py).
 """
 
 import json
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,6 +15,7 @@ if str(_BASE_DIR) not in sys.path:
 from agent import tools
 from agent.guardrails import check_response
 from rag.chain import ask as rag_ask
+from rag.chain import ask_overview as rag_ask_overview
 
 # Log de auditoria — requisito de rastreabilidade do desafio (PLANO_Fase3.md secao 2.6):
 # uma linha JSON por interacao, incluindo pergunta, paciente, fontes citadas, resposta
@@ -21,11 +23,23 @@ from rag.chain import ask as rag_ask
 AUDIT_LOG_DIR = _BASE_DIR / "logs"
 AUDIT_LOG_PATH = AUDIT_LOG_DIR / "audit.jsonl"
 
+# Extrai as duas secoes 'RELEVANTE:'/'ATENCAO:' pedidas no prompt de
+# rag/chain.py::OVERVIEW_INSTRUCTION. Aceita 'ATENCAO' e 'ATENÇÃO'.
+_OVERVIEW_SECTION_PATTERN = re.compile(
+    r"RELEVANTE\s*:(?P<relevante>.*?)(?:ATEN[CÇ][AÃ]O\s*:(?P<atencao>.*))?$",
+    re.IGNORECASE | re.DOTALL,
+)
+
 
 def receber_paciente(state: dict) -> dict:
-    """No de entrada: apenas valida que paciente_id e pergunta foram fornecidos."""
+    """No de entrada: valida paciente_id sempre; 'pergunta' e obrigatoria so no
+    fluxo de chat (tipo_interacao == 'chat', o default) — a visao geral
+    (tipo_interacao == 'visao_geral') nao tem uma pergunta livre do medico, ver
+    agent/graph.py e api/main.py::get_patient_overview.
+    """
     assert state.get("paciente_id") is not None, "paciente_id e obrigatorio"
-    assert state.get("pergunta"), "pergunta e obrigatoria"
+    if state.get("tipo_interacao", "chat") == "chat":
+        assert state.get("pergunta"), "pergunta e obrigatoria para o chat"
     return state
 
 
@@ -43,16 +57,30 @@ def emitir_alerta_exame(state: dict) -> dict:
     return state
 
 
+def rotear_geracao(state: dict) -> dict:
+    """No de passagem, sem efeito no estado: existe so para dar um ponto unico de
+    saida tanto do caminho com exame pendente (apos emitir_alerta_exame) quanto do
+    caminho sem pendencia, de onde uma unica aresta condicional (agent/graph.py::
+    _tipo_interacao) decide qual no de geracao chamar a seguir — chat ou visao
+    geral — sem duplicar a logica de checagem de exames pendentes para os dois
+    tipos de interacao.
+    """
+    return state
+
+
 def buscar_contexto_rag_e_gerar_resposta(state: dict) -> dict:
     """Une busca de contexto (RAG) + geracao da resposta em uma unica chamada,
     reaproveitando rag.chain.ask (que ja faz retrieval + prompt + LLM).
 
-    O contexto do paciente inclui o historico resumido E a ficha de anamnese
-    completa (queixa, historias, habitos, sinais vitais, exame fisico, hipotese
-    diagnostica e conduta — ver agent/tools.py::montar_contexto_clinico), para
-    que toda resposta do assistente — inclusive a "visao geral" automatica que o
-    front-end dispara ao abrir a tela do paciente — leve em conta a anamnese,
-    mesmo o front so enviando paciente_id + pergunta.
+    Caminho do CHAT (tipo_interacao == 'chat'): responde a pergunta livre do
+    medico. O contexto do paciente inclui o historico resumido E a ficha de
+    anamnese completa (queixa, historias, habitos, sinais vitais, exame fisico,
+    hipotese diagnostica e conduta — ver agent/tools.py::montar_contexto_clinico).
+
+    A "visao geral" automatica que o front-end dispara ao abrir a tela do paciente
+    usa um caminho diferente — ver gerar_visao_geral abaixo — porque pedir pra essa
+    mesma chain "revisar a anamnese" fazia o modelo so parafrasear a ficha que ja
+    esta visivel na tela, em vez de destacar o que e clinicamente relevante.
     """
     contexto_clinico = tools.montar_contexto_clinico(state["paciente_id"])
     rag_response = rag_ask(state["pergunta"], patient_context=contexto_clinico)
@@ -61,11 +89,80 @@ def buscar_contexto_rag_e_gerar_resposta(state: dict) -> dict:
     return state
 
 
+def gerar_visao_geral(state: dict) -> dict:
+    """Gera a 'visao geral' automatica exibida no card de IA da tela do paciente —
+    caminho alternativo a buscar_contexto_rag_e_gerar_resposta, escolhido pela
+    aresta condicional de agent/graph.py quando tipo_interacao == 'visao_geral'.
+
+    Diferente do chat, aqui nao ha uma pergunta livre do medico: o objetivo e
+    sintetizar a anamnese e os exames em pontos relevantes e pontos de atencao,
+    sem apenas repetir a ficha inteira (ver rag/chain.py::ask_overview e
+    OVERVIEW_INSTRUCTION para o formato de saida pedido ao modelo, e
+    _parse_overview_sections abaixo para como isso vira duas listas). Nao faz
+    retrieval de protocolos via RAG: o insumo aqui e o caso do paciente, nao os
+    protocolos internos do hospital.
+    """
+    contexto_clinico = tools.montar_contexto_clinico(state["paciente_id"])
+    rag_response = rag_ask_overview(contexto_clinico)
+    state["resposta_bruta"] = rag_response.answer
+    state["fontes"] = rag_response.sources
+    return state
+
+
+# Bullet precisa ser "- item" ou "* item" (com espaco depois do marcador) - so
+# "startswith('*')" colidiria com **negrito** em markdown, como o aviso que
+# agent/guardrails.py acrescenta a resposta sinalizada ("**Atencao:** ...").
+_BULLET_PATTERN = re.compile(r"^[-*]\s+(.*)$")
+
+
+def _extract_bullets(texto: str) -> list[str]:
+    """Extrai linhas de lista (iniciadas por '-' ou '* ') de um bloco de texto,
+    descartando linhas em branco ou texto solto fora do formato de lista esperado
+    (ex.: o aviso que agent/guardrails.py acrescenta quando a resposta e
+    sinalizada, que vem como paragrafo solto apos as duas secoes).
+    """
+    bullets = []
+    for linha in texto.splitlines():
+        linha = linha.strip()
+        match = _BULLET_PATTERN.match(linha)
+        if match:
+            item = match.group(1).strip()
+            if item:
+                bullets.append(item)
+    return bullets
+
+
+def _parse_overview_sections(texto: str) -> tuple[list[str], list[str]]:
+    """Quebra a resposta da 'visao geral' nas duas listas RELEVANTE:/ATENCAO:
+    pedidas pelo prompt (rag/chain.py::OVERVIEW_INSTRUCTION).
+
+    Fallback deliberado: o modelo fine-tuned e pequeno e foi treinado
+    majoritariamente em QA factual (MedQuAD/PubMedQA), entao pode nao seguir o
+    formato pedido a risca. Se os marcadores nao aparecerem, devolve a resposta
+    inteira como um unico ponto relevante em vez de listas vazias — o front ainda
+    mostra algo util em vez de uma tela em branco.
+    """
+    match = _OVERVIEW_SECTION_PATTERN.search(texto or "")
+    if not match:
+        texto_limpo = (texto or "").strip()
+        return ([texto_limpo] if texto_limpo else [], [])
+
+    pontos_relevantes = _extract_bullets(match.group("relevante") or "")
+    pontos_atencao = _extract_bullets(match.group("atencao") or "")
+    return pontos_relevantes, pontos_atencao
+
+
 def validar_seguranca(state: dict) -> dict:
     resultado = check_response(state["resposta_bruta"])
     state["resposta_final"] = resultado.safe_response
     state["requer_validacao_humana"] = resultado.is_flagged
     state["padroes_sinalizados"] = resultado.matched_patterns
+
+    if state.get("tipo_interacao") == "visao_geral":
+        pontos_relevantes, pontos_atencao = _parse_overview_sections(state["resposta_final"])
+        state["pontos_relevantes"] = pontos_relevantes
+        state["pontos_atencao"] = pontos_atencao
+
     return state
 
 
@@ -94,6 +191,7 @@ def log_auditoria(state: dict) -> dict:
     """
     entry = {
         "timestamp": datetime.now(timezone.utc).isoformat(),
+        "tipo_interacao": state.get("tipo_interacao", "chat"),
         "paciente_id": state.get("paciente_id"),
         "pergunta": state.get("pergunta"),
         "exames_pendentes": state.get("exames_pendentes", []),
@@ -101,6 +199,8 @@ def log_auditoria(state: dict) -> dict:
         "fontes": state.get("fontes", []),
         "resposta_bruta": state.get("resposta_bruta"),
         "resposta_final": state.get("resposta_final"),
+        "pontos_relevantes": state.get("pontos_relevantes", []),
+        "pontos_atencao": state.get("pontos_atencao", []),
         "padroes_sinalizados": state.get("padroes_sinalizados", []),
         "requer_validacao_humana": state.get("requer_validacao_humana"),
         "status": state.get("status"),

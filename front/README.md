@@ -1,59 +1,48 @@
-# Front
+# Hospital VEinstein — Frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.3.36.
+Frontend em **Angular 20** (standalone components + Signals + Angular Material) do projeto **OncoTech**, Tech Challenge Fase 3 da pós-graduação em IA (FIAP). É o painel usado pelo médico dentro do hospital para consultar pacientes, revisar a anamnese, acompanhar exames e conversar com o assistente médico virtual (backend em [`../1.AssistenteMedico`](../1.AssistenteMedico/README.md)).
 
-## Development server
+> Plano de arquitetura completo do Tech Challenge em [`PLANO_Fase3.md`](../PLANO_Fase3.md), na raiz do repositório.
 
-To start a local development server, run:
+## Funcionalidades
+
+- **Lista de pacientes** com busca por nome.
+- **Ficha do paciente**: anamnese completa (queixa, históricos, hábitos, sinais vitais, exame físico, hipótese diagnóstica e conduta), organizada para leitura médica rápida.
+- **Visão geral por IA**: ao abrir o paciente, o assistente já analisa a anamnese e os exames automaticamente, sugerindo condutas/exames e sinalizando pontos de preocupação com um alerta visual bem visível.
+- **Chat com o assistente médico** (`/assistant/ask`) para perguntas livres sobre o paciente em consulta.
+- **Exames**: realizados e pendentes (com detalhes do agendamento), lado a lado.
+
+## Stack
+
+- Angular 20 (standalone, sem NgModules) + Signals
+- Angular Material 20 (tema `azure-blue`)
+- RxJS
+
+## Pré-requisitos
+
+- Node.js 20+ e npm
+- Backend do assistente rodando em `http://localhost:8001` (ver [`../1.AssistenteMedico/README.md`](../1.AssistenteMedico/README.md))
+
+## Como rodar
 
 ```bash
-ng serve
+cd front
+npm install
+npm start          # equivalente a `ng serve`
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+Acesse `http://localhost:4200`. A URL da API é configurada em `src/environments/environment.ts` (`apiUrl`).
 
-## Code scaffolding
-
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
+## Build de produção
 
 ```bash
 ng build
 ```
 
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
+Os artefatos são gerados em `dist/front/`.
 
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
+## Testes
 
 ```bash
 ng test
 ```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.

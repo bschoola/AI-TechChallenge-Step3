@@ -24,7 +24,37 @@
       <span>{{ errorMessage() }}</span>
     </div>
   } @else if (response()) {
-    <p class="overview-text">{{ response()!.resposta }}</p>
+    @if (response()!.pontos_relevantes.length > 0) {
+      <div class="overview-section">
+        <span class="overview-section-title relevant">
+          <mat-icon>checklist</mat-icon>
+          Pontos relevantes
+        </span>
+        <ul class="overview-list">
+          @for (ponto of response()!.pontos_relevantes; track ponto) {
+            <li>{{ ponto }}</li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (response()!.pontos_atencao.length > 0) {
+      <div class="overview-section">
+        <span class="overview-section-title attention">
+          <mat-icon>warning</mat-icon>
+          Pontos de atenção
+        </span>
+        <ul class="overview-list attention">
+          @for (ponto of response()!.pontos_atencao; track ponto) {
+            <li>{{ ponto }}</li>
+          }
+        </ul>
+      </div>
+    }
+
+    @if (response()!.pontos_relevantes.length === 0 && response()!.pontos_atencao.length === 0) {
+      <p class="overview-empty">Nenhum ponto relevante ou de atenção identificado para este paciente.</p>
+    }
 
     @if (response()!.fontes.length > 0) {
       <div class="overview-sources">

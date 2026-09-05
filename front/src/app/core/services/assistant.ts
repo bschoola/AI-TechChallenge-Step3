@@ -3,25 +3,28 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 
 import { environment } from '../../../environments/environment';
-import { AskRequest, AskResponse } from '../models/assistant.model';
-
-/** Prompt padrão disparado automaticamente ao abrir a tela do paciente, para
- * trazer uma visão geral gerada pela IA (anamnese, exames recentes, sugestões
- * e pontos de preocupação) antes de qualquer pergunta manual do médico. */
-export const VISAO_GERAL_PROMPT =
-  'Faça uma visão geral deste paciente para a equipe médica: revise a anamnese, ' +
-  'analise os exames realizados recentemente, sugira exames adicionais se ' +
-  'pertinente considerando o histórico e os exames pendentes, e sinalize ' +
-  'claramente quaisquer pontos de preocupação que mereçam atenção.';
+import { AskRequest, AskResponse, OverviewResponse } from '../models/assistant.model';
 
 @Injectable({
   providedIn: 'root',
 })
 export class AssistantService {
   private readonly http = inject(HttpClient);
-  private readonly baseUrl = `${environment.apiUrl}/assistant`;
+  private readonly baseUrl = environment.apiUrl;
 
+  /** Pergunta livre do médico ao assistente (chat) — POST /assistant/ask. */
   ask(request: AskRequest): Observable<AskResponse> {
-    return this.http.post<AskResponse>(`${this.baseUrl}/ask`, request);
+    return this.http.post<AskResponse>(`${this.baseUrl}/assistant/ask`, request);
+  }
+
+  /** Visão geral automática do paciente (card de IA da tela de detalhe) —
+   * POST /patients/{id}/overview. Endpoint dedicado (em vez de reusar /assistant/ask
+   * com um prompt fixo de "visão geral"): o modelo, ao ser instruído a "revisar a
+   * anamnese" dentro do mesmo fluxo do chat, tendia só a parafrasear a ficha que já
+   * aparece do lado esquerdo da tela em vez de destacar o que é relevante. Esse
+   * endpoint usa um nó/prompt dedicados no backend (agent/nodes.py::gerar_visao_geral)
+   * que devolve pontos_relevantes/pontos_atencao já estruturados. */
+  getOverview(patientId: number): Observable<OverviewResponse> {
+    return this.http.post<OverviewResponse>(`${this.baseUrl}/patients/${patientId}/overview`, {});
   }
 }
