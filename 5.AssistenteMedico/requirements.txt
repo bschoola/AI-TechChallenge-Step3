@@ -9,7 +9,8 @@ datasets>=2.20.0
 
 # --- RAG / LangChain ---
 langchain>=0.2.0
-langchain-community>=0.2.0
+langchain-chroma>=0.1.4       # integracao Chroma nao-deprecada (langchain_community.vectorstores.Chroma esta sendo descontinuada)
+langchain-text-splitters>=0.2.0
 langchain-huggingface>=0.0.3
 langgraph>=0.2.0
 chromadb>=0.5.0

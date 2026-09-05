@@ -2,8 +2,15 @@
 retorna o dicionario de estado do LangGraph (ver AgentState em graph.py).
 """
 
-from . import tools
-from .guardrails import check_response
+import sys
+from pathlib import Path
+
+_BASE_DIR = Path(__file__).resolve().parent.parent
+if str(_BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(_BASE_DIR))
+
+from agent import tools
+from agent.guardrails import check_response
 from rag.chain import ask as rag_ask
 
 

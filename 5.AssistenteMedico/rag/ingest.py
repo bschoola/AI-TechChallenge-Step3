@@ -4,46 +4,79 @@ Uso:
     python rag/ingest.py
 """
 
+import sys
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Permite rodar este arquivo diretamente ("python rag/ingest.py") sem depender de
+# import relativo, que so funciona quando o modulo e importado como pacote.
+if str(BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(BASE_DIR))
+
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+from rag.embeddings import load_embeddings
+
+
 PROTOCOLOS_DIR = BASE_DIR / "data" / "raw" / "protocolos"
 CHROMA_PERSIST_DIR = BASE_DIR / "data" / "processed" / "chroma"
 
-EMBEDDING_MODEL_NAME = "intfloat/multilingual-e5-small"
+CHUNK_SIZE = 500
+CHUNK_OVERLAP = 50
 
 
-def load_documents() -> list[dict]:
-    """Le cada arquivo .md/.txt em PROTOCOLOS_DIR como um documento fonte.
+def load_documents() -> list[Document]:
+    """Le cada arquivo .md em PROTOCOLOS_DIR como um documento fonte.
 
-    TODO: usar langchain_community.document_loaders (DirectoryLoader/TextLoader) e
-    manter o nome do arquivo como metadado 'fonte' — necessario para explainability
-    (a resposta final precisa citar de qual protocolo veio o trecho usado).
+    O metadado 'fonte' (nome do arquivo, sem extensao) e o que a resposta final
+    vai citar como explainability (ver rag/chain.py e agent/nodes.py) — por isso
+    e guardado desde a leitura, antes do chunking.
     """
-    raise NotImplementedError
+    if not PROTOCOLOS_DIR.exists():
+        raise RuntimeError(f"Pasta {PROTOCOLOS_DIR} nao existe.")
+
+    documents = [
+        Document(page_content=path.read_text(encoding="utf-8"), metadata={"fonte": path.stem})
+        for path in sorted(PROTOCOLOS_DIR.glob("*.md"))
+    ]
+
+    if not documents:
+        raise RuntimeError(
+            f"Nenhum arquivo .md encontrado em {PROTOCOLOS_DIR}. "
+            "Confira PLANO_Fase3.md secao 3 para o formato esperado dos protocolos."
+        )
+    return documents
 
 
-def split_documents(documents: list[dict]) -> list[dict]:
-    """Chunking dos documentos (ex.: RecursiveCharacterTextSplitter, ~500 tokens,
-    overlap ~50) preservando o metadado de fonte em cada chunk.
+def split_documents(documents: list[Document]) -> list[Document]:
+    """Chunking com overlap, preservando o metadado 'fonte' de cada documento em
+    todos os seus chunks (comportamento padrao do RecursiveCharacterTextSplitter).
     """
-    raise NotImplementedError
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        separators=["\n\n", "\n", ". ", " ", ""],
+    )
+    return splitter.split_documents(documents)
 
 
-def build_vectorstore(chunks: list[dict]) -> None:
-    """Gera embeddings (EMBEDDING_MODEL_NAME) e persiste em Chroma (CHROMA_PERSIST_DIR).
-
-    TODO: langchain_huggingface.HuggingFaceEmbeddings + langchain_community.vectorstores.Chroma
-    .from_documents(..., persist_directory=str(CHROMA_PERSIST_DIR)).
-    """
-    raise NotImplementedError
+def build_vectorstore(chunks: list[Document]) -> Chroma:
+    """Gera embeddings (E5Embeddings, ver rag/embeddings.py) e persiste em Chroma."""
+    CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
+    return Chroma.from_documents(
+        documents=chunks,
+        embedding=load_embeddings(),
+        persist_directory=str(CHROMA_PERSIST_DIR),
+    )
 
 
 def main() -> None:
     docs = load_documents()
     chunks = split_documents(docs)
     build_vectorstore(chunks)
-    print(f"Indexados {len(chunks)} chunks em {CHROMA_PERSIST_DIR}")
+    print(f"Indexados {len(chunks)} chunks (a partir de {len(docs)} documentos) em {CHROMA_PERSIST_DIR}")
 
 
 if __name__ == "__main__":

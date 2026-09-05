@@ -2,7 +2,13 @@
 2.PredictionApi/main.py (lifespan carrega o grafo uma vez, endpoints Pydantic).
 """
 
+import sys
 from contextlib import asynccontextmanager
+from pathlib import Path
+
+_BASE_DIR = Path(__file__).resolve().parent.parent
+if str(_BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(_BASE_DIR))
 
 from fastapi import FastAPI
 from pydantic import BaseModel, Field

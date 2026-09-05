@@ -20,11 +20,17 @@ Ver diagrama completo em PLANO_Fase3.md, secao 2.5:
     log_auditoria (END)
 """
 
+import sys
+from pathlib import Path
 from typing import TypedDict
+
+_BASE_DIR = Path(__file__).resolve().parent.parent
+if str(_BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(_BASE_DIR))
 
 from langgraph.graph import END, StateGraph
 
-from . import nodes
+from agent import nodes
 
 
 class AgentState(TypedDict, total=False):

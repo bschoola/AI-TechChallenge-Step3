@@ -2,9 +2,16 @@
 fine-tuned, retornando resposta + fontes citadas (explainability).
 """
 
+import sys
 from dataclasses import dataclass
+from pathlib import Path
 
-from .ingest import CHROMA_PERSIST_DIR, EMBEDDING_MODEL_NAME
+_BASE_DIR = Path(__file__).resolve().parent.parent
+if str(_BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(_BASE_DIR))
+
+from rag.embeddings import EMBEDDING_MODEL_NAME, load_embeddings
+from rag.ingest import CHROMA_PERSIST_DIR
 
 SYSTEM_PROMPT = """Voce e um assistente medico de apoio a decisao clinica do hospital.
 Use APENAS as informacoes do contexto abaixo para responder. Se o contexto nao for
