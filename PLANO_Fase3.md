@@ -1,6 +1,6 @@
 # Plano Técnico — Tech Challenge Fase 3: Assistente Médico Virtual
 
-> Continuação do projeto **OncoTech** (Fases 1-3 já entregues: Algoritmo Genético → API de Predição + LLM → Frontend Angular). Este documento planeja o **novo módulo** exigido pelo desafio da Fase 3 da pós-graduação: um assistente médico virtual com fine-tuning de LLM, LangChain e LangGraph.
+> Continuação do projeto **OncoTech** (fases anteriores — Algoritmo Genético, API de Predição + LLM, Frontend Angular — já entregues e avaliadas; os artefatos dessas fases foram removidos deste repositório após a entrega, que agora contém só o módulo da Fase 3). Este documento planeja o assistente médico virtual com fine-tuning de LLM, LangChain e LangGraph.
 
 Data do plano: 23/08/2026 · Prazo assumido: 2 a 4 semanas · Sem GPU dedicada disponível (uso de Colab gratuito / CPU).
 
@@ -54,7 +54,7 @@ Fine-tuning sozinho não resolve "consultar prontuário atualizado" (dado muda a
 Duas opções, da mais simples à mais "produção":
 
 1. **`HuggingFacePipeline` direto** (recomendado para o prazo do desafio): carrega o modelo + adapter LoRA via `transformers`, embrulha como LLM do LangChain. Sem etapas extras de conversão.
-2. **Merge + GGUF + Ollama** (reaproveita a stack Docker da Fase 2): mais trabalho (conversão via `llama.cpp`), mas reaproveita o `docker-compose.yml` existente e reforça a coerência do portfólio. Deixar como "melhoria" se sobrar tempo, não como caminho crítico.
+2. **Merge + GGUF + Ollama**: mais trabalho (conversão via `llama.cpp`), útil se quiser servir o modelo fora do processo Python (ex.: via Ollama). Deixar como "melhoria" se sobrar tempo, não como caminho crítico.
 
 ### 2.5 LangGraph — fluxo de decisão
 
@@ -121,37 +121,39 @@ Gerar esse dataset com apoio de um LLM (Claude/GPT) é uma abordagem legítima e
 
 ## 4. Estrutura de pastas proposta
 
-Novo módulo `5.AssistenteMedico/`, seguindo o mesmo padrão de numeração e modularização já usado no repositório (`1.GenAIPrediction`, `2.PredictionApi`, `3.Front`, `4.StressTests`):
+Módulo único do repositório, `1.AssistenteMedico/`:
 
 ```
-5.AssistenteMedico/
+1.AssistenteMedico/
 ├── README.md                    # instruções completas (requisito do PDF)
 ├── requirements.txt
 ├── data/
 │   ├── raw/                     # protocolos, faqs, laudos-modelo (sintéticos)
-│   └── processed/                # dataset.jsonl (train/val) + prontuarios_mock.db
+│   └── processed/                # dataset.jsonl (train/val) + chroma/ + prontuarios_mock.db
 ├── finetuning/
 │   ├── config.py                 # modelo base, hiperparâmetros LoRA, paths
 │   ├── prepare_dataset.py        # limpeza, dedup, split train/val
-│   ├── train_qlora.py            # script de treino (roda local ou adaptado p/ Colab)
+│   ├── train_qlora.py            # script de treino (GPU/QLoRA ou fallback CPU/LoRA)
+│   ├── train_qlora_colab.ipynb   # mesmo treino, adaptado para Google Colab (GPU T4)
 │   └── evaluate.py               # comparação antes/depois do fine-tuning
 ├── rag/
+│   ├── embeddings.py              # wrapper de embeddings E5 (prefixos query/passage)
 │   ├── ingest.py                  # indexa data/raw no Chroma
-│   └── chain.py                   # RAG chain (LCEL) com citação de fonte
+│   └── chain.py                   # RAG chain com citação de fonte
 ├── agent/
 │   ├── graph.py                   # StateGraph do LangGraph
-│   ├── nodes.py                   # implementação de cada nó
+│   ├── nodes.py                   # implementação de cada nó (incl. log_auditoria)
 │   ├── guardrails.py              # filtro de prescrição + validação de segurança
 │   └── tools.py                   # tool de consulta ao prontuário (SQLite)
 ├── api/
-│   └── main.py                    # FastAPI expõe POST /assistant/ask (mesmo padrão da Fase 2)
+│   └── main.py                    # FastAPI expõe POST /assistant/ask
 ├── logs/
 │   └── audit.jsonl                # gerado em runtime, git-ignorado
 └── tests/
     └── README.md                  # o que testar (guardrails, RAG retrieval, grafo)
 ```
 
-Os arquivos-base já foram criados como esqueleto (ver seção 7).
+Ver seção 7 para o status atual de implementação de cada peça.
 
 ---
 
@@ -170,22 +172,30 @@ Se o prazo real for mais apertado, a semana 2 (fine-tuning) é a que mais aceita
 
 ## 6. Checklist de entregáveis (mapeado ao PDF)
 
-- [ ] Pipeline de fine-tuning (código + dataset)
-- [ ] Integração com LangChain (RAG + tool de prontuário)
-- [ ] Fluxos do LangGraph (grafo com decisão automatizada)
-- [ ] Dataset anonimizado/sintético incluído no repo
-- [ ] Guardrail: assistente nunca prescreve diretamente sem validação humana
-- [ ] Logging detalhado para auditoria (`logs/audit.jsonl`)
-- [ ] Explainability (fonte da informação citada na resposta)
-- [ ] Projeto modularizado em Python + README completo
+- [x] Pipeline de fine-tuning (código + dataset) — `finetuning/`, GPU (Colab) ou fallback CPU
+- [x] Integração com LangChain (RAG + tool de prontuário) — `rag/`, `agent/tools.py`
+- [x] Fluxos do LangGraph (grafo com decisão automatizada) — `agent/graph.py`, `agent/nodes.py`
+- [x] Dataset anonimizado/sintético incluído no repo — `data/raw/` (sintético por design, sem PII)
+- [x] Guardrail: assistente nunca prescreve diretamente sem validação humana — `agent/guardrails.py`
+- [x] Logging detalhado para auditoria (`logs/audit.jsonl`) — `agent/nodes.py::log_auditoria`
+- [x] Explainability (fonte da informação citada na resposta) — `rag/chain.py` (campo `fontes`)
+- [x] Projeto modularizado em Python + README completo
 - [ ] Relatório técnico: explicação do fine-tuning, descrição do assistente, diagrama do fluxo LangChain/LangGraph, avaliação do modelo
 - [ ] Vídeo (≤15 min): treinamento/funcionamento da LLM, execução de fluxo automatizado, resposta a pergunta clínica contextualizada, logs e validação
 
+> Itens marcados como concluídos estão implementados e testados (localmente e/ou com componentes reduzidos, quando o ambiente de desenvolvimento não tinha GPU/rede); falta confirmar uma rodada 100% end-to-end no seu ambiente (fine-tuning real + índice RAG real + endpoint respondendo) antes de considerar "pronto para gravar o vídeo".
+
 ---
 
-## 7. O que já foi criado agora
+## 7. Status de implementação
 
-Scaffold do módulo `5.AssistenteMedico/` com README, `requirements.txt` e stubs de código (assinaturas de função, docstrings e TODOs alinhados a este plano) para todos os componentes acima, prontos para você começar a implementar sem precisar decidir estrutura do zero.
+Todos os componentes descritos na seção 4 estão implementados em `1.AssistenteMedico/`, não apenas esqueletados:
+
+- `finetuning/prepare_dataset.py`, `rag/ingest.py`, `rag/embeddings.py`, `rag/chain.py`, `agent/tools.py`, `agent/guardrails.py`, `agent/nodes.py`, `agent/graph.py`, `api/main.py` — implementados e testados.
+- `finetuning/train_qlora.py` — implementado com dois caminhos: QLoRA 4-bit real (GPU/CUDA) ou LoRA sem quantização como fallback de CPU (mais lento, mas funciona com RAM suficiente). `finetuning/train_qlora_colab.ipynb` cobre o caminho recomendado (Colab, GPU T4 gratuita).
+- `finetuning/evaluate.py` — único item ainda pendente (comparação formal base vs. fine-tuned para o relatório técnico); não faz parte do caminho de execução da API.
+
+Próximos passos: rodar o fine-tuning e o `rag/ingest.py` de ponta a ponta no seu ambiente (gera o adapter LoRA e o índice Chroma reais), confirmar o endpoint `/assistant/ask` respondendo com um caso real, implementar `evaluate.py`, e então partir para o relatório técnico e o vídeo demo.
 
 ## 8. Riscos e pontos de atenção
 

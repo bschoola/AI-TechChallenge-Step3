@@ -1,7 +1,0 @@
-fastapi
-uvicorn[standard]
-joblib
-scikit-learn
-pydantic
-openai
-celery[redis]
