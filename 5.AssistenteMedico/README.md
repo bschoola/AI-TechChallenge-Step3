@@ -53,12 +53,21 @@ python finetuning/prepare_dataset.py
 # 2. Indexar protocolos no RAG
 python rag/ingest.py
 
-# 3. Fine-tuning (recomendado em Colab com GPU — ver finetuning/train_qlora.py)
+# 3. Fine-tuning — recomendado em GPU (Colab), funciona em CPU como fallback (mais lento).
+# Opção A (recomendada): abra finetuning/train_qlora_colab.ipynb no Google Colab
+#   (GPU T4 gratuita) e rode as células em ordem.
+# Opção B (CPU local, precisa de bastante RAM — ver seção abaixo):
 python finetuning/train_qlora.py
 
 # 4. Subir a API
 uvicorn api.main:app --reload --port 8001
 ```
+
+## Fine-tuning: GPU (recomendado) ou CPU (fallback mais lento)
+
+QLoRA "de verdade" (4-bit, via `bitsandbytes`) exige GPU com CUDA. Sem GPU dedicada, o caminho recomendado é o **Google Colab gratuito (GPU T4)**: abra `finetuning/train_qlora_colab.ipynb`, monte o Google Drive, e siga as células — o notebook já cuida de instalar dependências, gerar o dataset e salvar o adapter treinado direto no Drive (assim uma queda de sessão do Colab não perde o progresso).
+
+`finetuning/train_qlora.py` também roda **localmente em CPU** como fallback: se não detectar GPU, carrega o modelo sem quantização (LoRA "cru", não QLoRA) no dtype definido em `config.py::CPU_DTYPE` (bfloat16 por padrão). Com 32GB de RAM isso é tecnicamente viável para o `Qwen2.5-3B-Instruct` (~6GB só para os pesos em bf16), mas é ordens de magnitude mais lento que GPU — um treino de minutos na T4 pode levar horas na CPU. Se a velocidade incomodar, troque `BASE_MODEL_NAME` em `config.py` para `Qwen2.5-1.5B-Instruct` ou `Qwen2.5-0.5B-Instruct` antes de treinar.
 
 ## Aviso
 

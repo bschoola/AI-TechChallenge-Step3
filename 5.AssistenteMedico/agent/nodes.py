@@ -2,7 +2,9 @@
 retorna o dicionario de estado do LangGraph (ver AgentState em graph.py).
 """
 
+import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -12,6 +14,12 @@ if str(_BASE_DIR) not in sys.path:
 from agent import tools
 from agent.guardrails import check_response
 from rag.chain import ask as rag_ask
+
+# Log de auditoria — requisito de rastreabilidade do desafio (PLANO_Fase3.md secao 2.6):
+# uma linha JSON por interacao, incluindo pergunta, paciente, fontes citadas, resposta
+# e a decisao de seguranca tomada pelo grafo.
+AUDIT_LOG_DIR = _BASE_DIR / "logs"
+AUDIT_LOG_PATH = AUDIT_LOG_DIR / "audit.jsonl"
 
 
 def receber_paciente(state: dict) -> dict:
@@ -69,10 +77,31 @@ def finalizar_resposta(state: dict) -> dict:
 
 def log_auditoria(state: dict) -> dict:
     """No terminal, sempre executado. Grava a interacao completa em logs/audit.jsonl
-    (timestamp, pergunta, paciente, contexto recuperado, resposta, flags de
-    seguranca, decisao do grafo) — requisito de logging/auditoria do desafio.
+    (timestamp, pergunta, paciente, fontes citadas, resposta, flags de seguranca,
+    decisao do grafo) — requisito de logging/auditoria do desafio.
 
-    TODO: usar um timestamp real (nao disponivel em ambiente de teste/replay) e
-    persistir via json.dumps em modo append em BASE_DIR / 'logs' / 'audit.jsonl'.
+    Uma linha JSON por interacao (append), para poder auditar/replayar depois sem
+    carregar tudo em memoria. Nunca levanta excecao por falha de escrita do log (um
+    problema de disco/permissao nao deveria derrubar a resposta ja gerada para o
+    medico) — so registra o problema no stdout.
     """
-    raise NotImplementedError
+    entry = {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "paciente_id": state.get("paciente_id"),
+        "pergunta": state.get("pergunta"),
+        "exames_pendentes": state.get("exames_pendentes", []),
+        "alerta": state.get("alerta"),
+        "fontes": state.get("fontes", []),
+        "resposta_bruta": state.get("resposta_bruta"),
+        "resposta_final": state.get("resposta_final"),
+        "padroes_sinalizados": state.get("padroes_sinalizados", []),
+        "requer_validacao_humana": state.get("requer_validacao_humana"),
+        "status": state.get("status"),
+    }
+    try:
+        AUDIT_LOG_DIR.mkdir(parents=True, exist_ok=True)
+        with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except OSError as exc:
+        print(f"Aviso: falha ao gravar log de auditoria em {AUDIT_LOG_PATH}: {exc}")
+    return state
