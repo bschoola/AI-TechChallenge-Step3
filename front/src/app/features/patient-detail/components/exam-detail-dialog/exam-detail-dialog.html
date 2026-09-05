@@ -1,0 +1,45 @@
+<h2 mat-dialog-title>Detalhe do exame</h2>
+
+<mat-dialog-content>
+  @if (loading()) {
+    <div class="dialog-state">
+      <mat-spinner diameter="28" />
+      <span>Carregando...</span>
+    </div>
+  } @else if (errorMessage()) {
+    <div class="dialog-state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ errorMessage() }}</span>
+    </div>
+  } @else if (exam(); as e) {
+    <div class="exam-detail">
+      <div class="exam-detail-header">
+        <span class="exam-detail-type">{{ e.tipo }}</span>
+        <span class="exam-status" [class.pending]="e.status === 'pendente'">
+          {{ e.status === 'pendente' ? 'Pendente' : 'Concluído' }}
+        </span>
+      </div>
+
+      <dl class="exam-detail-grid">
+        <dt>Data de solicitação</dt>
+        <dd>{{ e.data_solicitacao || '—' }}</dd>
+
+        <dt>Data de realização</dt>
+        <dd>{{ e.data_realizacao || 'Ainda não realizado' }}</dd>
+
+        <dt>Médico solicitante</dt>
+        <dd>{{ e.medico_solicitante || '—' }}</dd>
+
+        <dt>Resultado</dt>
+        <dd>{{ e.resultado || 'Ainda não disponível' }}</dd>
+
+        <dt>Observações</dt>
+        <dd>{{ e.observacoes || '—' }}</dd>
+      </dl>
+    </div>
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="close()">Fechar</button>
+</mat-dialog-actions>

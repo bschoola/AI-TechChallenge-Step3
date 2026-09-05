@@ -1,0 +1,58 @@
+<section class="page">
+  <header class="list-header">
+    <div>
+      <h1>Pacientes</h1>
+      <p class="subtitle">Localize um paciente para ver prontuário, exames e assistente de IA.</p>
+    </div>
+
+    <mat-form-field appearance="outline" class="search-field">
+      <mat-label>Buscar por nome</mat-label>
+      <input matInput [formControl]="searchControl" placeholder="Ex.: Ficticio" autocomplete="off" />
+      <mat-icon matPrefix>search</mat-icon>
+    </mat-form-field>
+  </header>
+
+  @if (loading()) {
+    <div class="state-box">
+      <mat-spinner diameter="36" />
+      <span>Carregando pacientes...</span>
+    </div>
+  } @else if (errorMessage()) {
+    <div class="state-box error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ errorMessage() }}</span>
+    </div>
+  } @else if (patients().length === 0) {
+    <div class="state-box">
+      <mat-icon>person_search</mat-icon>
+      <span>Nenhum paciente encontrado.</span>
+    </div>
+  } @else {
+    <div class="patient-grid">
+      @for (patient of patients(); track patient.id) {
+        <mat-card class="patient-card" (click)="openPatient(patient)">
+          <div class="patient-avatar">
+            <mat-icon>person</mat-icon>
+          </div>
+          <div class="patient-info">
+            <span class="patient-name">{{ patient.nome_ficticio }}</span>
+            <span class="patient-meta">
+              @if (patient.idade !== null) {
+                {{ patient.idade }} anos
+              }
+              @if (patient.sexo) {
+                · {{ patient.sexo }}
+              }
+            </span>
+            @if (patient.historico) {
+              <span class="patient-history">{{ patient.historico }}</span>
+            }
+          </div>
+          <button mat-icon-button aria-label="Abrir prontuário" class="patient-arrow">
+            <mat-icon>chevron_right</mat-icon>
+          </button>
+        </mat-card>
+      }
+    </div>
+  }
+</section>

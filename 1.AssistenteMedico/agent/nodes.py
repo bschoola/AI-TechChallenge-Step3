@@ -46,9 +46,16 @@ def emitir_alerta_exame(state: dict) -> dict:
 def buscar_contexto_rag_e_gerar_resposta(state: dict) -> dict:
     """Une busca de contexto (RAG) + geracao da resposta em uma unica chamada,
     reaproveitando rag.chain.ask (que ja faz retrieval + prompt + LLM).
+
+    O contexto do paciente inclui o historico resumido E a ficha de anamnese
+    completa (queixa, historias, habitos, sinais vitais, exame fisico, hipotese
+    diagnostica e conduta — ver agent/tools.py::montar_contexto_clinico), para
+    que toda resposta do assistente — inclusive a "visao geral" automatica que o
+    front-end dispara ao abrir a tela do paciente — leve em conta a anamnese,
+    mesmo o front so enviando paciente_id + pergunta.
     """
-    historico = tools.get_historico_paciente(state["paciente_id"])
-    rag_response = rag_ask(state["pergunta"], patient_context=historico)
+    contexto_clinico = tools.montar_contexto_clinico(state["paciente_id"])
+    rag_response = rag_ask(state["pergunta"], patient_context=contexto_clinico)
     state["resposta_bruta"] = rag_response.answer
     state["fontes"] = rag_response.sources
     return state

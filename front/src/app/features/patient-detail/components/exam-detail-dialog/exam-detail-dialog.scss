@@ -1,0 +1,59 @@
+.dialog-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #5c7a85;
+  padding: 1.5rem 0;
+
+  &.error {
+    color: #b3261e;
+  }
+}
+
+.exam-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.exam-detail-type {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #103a4d;
+}
+
+.exam-status {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+  background: #e3f3e6;
+  color: #2e7d32;
+
+  &.pending {
+    background: #fdf1de;
+    color: #b06d00;
+  }
+}
+
+.exam-detail-grid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  row-gap: 0.75rem;
+  column-gap: 1rem;
+  margin: 0;
+
+  dt {
+    font-size: 0.8rem;
+    color: #5c7a85;
+    font-weight: 600;
+  }
+
+  dd {
+    margin: 0;
+    color: #26424c;
+    line-height: 1.45;
+  }
+}

@@ -1,0 +1,93 @@
+<section class="page">
+  <a routerLink="/" class="back-link">
+    <mat-icon>arrow_back</mat-icon>
+    Voltar para pacientes
+  </a>
+
+  @if (patientLoading()) {
+    <div class="state-box">
+      <mat-spinner diameter="36" />
+      <span>Carregando prontuário...</span>
+    </div>
+  } @else if (patientNotFound()) {
+    <div class="state-box error">
+      <mat-icon>person_off</mat-icon>
+      <span>Paciente não encontrado.</span>
+    </div>
+  } @else if (patient(); as p) {
+    <header class="patient-header">
+      <div class="patient-header-top">
+        <div class="patient-avatar">
+          <mat-icon>person</mat-icon>
+        </div>
+        <div class="patient-header-info">
+          <h1>{{ p.nome_ficticio }}</h1>
+          <span class="patient-header-meta">
+            ID #{{ p.id }}
+            @if (p.idade !== null) {
+              · {{ p.idade }} anos
+            }
+            @if (p.sexo) {
+              · {{ p.sexo }}
+            }
+          </span>
+        </div>
+      </div>
+
+      <div class="quick-stats">
+        <div class="stat-tile">
+          <mat-icon>schedule</mat-icon>
+          <div class="stat-tile-text">
+            <span class="stat-label">Idade</span>
+            <span class="stat-value">{{ p.idade !== null ? (p.idade + ' anos') : '—' }}</span>
+          </div>
+        </div>
+        <div class="stat-tile">
+          <mat-icon>person</mat-icon>
+          <div class="stat-tile-text">
+            <span class="stat-label">Sexo</span>
+            <span class="stat-value">{{ p.sexo || '—' }}</span>
+          </div>
+        </div>
+        <div class="stat-tile pending">
+          <mat-icon>pending_actions</mat-icon>
+          <div class="stat-tile-text">
+            <span class="stat-label">Pendentes</span>
+            <span class="stat-value">{{ pendentesCount() }} exame(s)</span>
+          </div>
+        </div>
+        <div class="stat-tile done">
+          <mat-icon>fact_check</mat-icon>
+          <div class="stat-tile-text">
+            <span class="stat-label">Realizados</span>
+            <span class="stat-value">{{ concluidosCount() }} exame(s)</span>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <app-concern-alert-banner
+      [alerta]="overviewResponse()?.alerta ?? null"
+      [requerValidacaoHumana]="overviewResponse()?.requer_validacao_humana ?? false"
+    />
+
+    <div class="patient-grid">
+      <div class="patient-main">
+        <app-anamnesis-card [patientId]="p.id" />
+
+        <app-exams-panel
+          [exams]="exams()"
+          [loading]="examsLoading()"
+          [errorMessage]="examsError()"
+          (examSelected)="openExam($event)"
+        />
+      </div>
+
+      <div class="patient-side">
+        <app-ai-overview-panel [patientId]="p.id" (overview)="onOverview($event)" />
+
+        <app-assistant-chat [patientId]="p.id" />
+      </div>
+    </div>
+  }
+</section>

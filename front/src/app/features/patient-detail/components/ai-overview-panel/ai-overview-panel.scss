@@ -1,0 +1,70 @@
+.overview-card {
+  padding: 1.35rem 1.5rem;
+}
+
+.overview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.85rem;
+}
+
+.overview-title {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #103a4d;
+}
+
+.overview-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  border-radius: 8px;
+  background: #e4f2f4;
+  color: #0f7c8c;
+
+  mat-icon {
+    font-size: 18px;
+    height: 18px;
+    width: 18px;
+  }
+}
+
+.overview-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #5c7a85;
+  font-size: 0.85rem;
+  padding: 0.5rem 0 0.75rem;
+
+  &.error {
+    color: #b3261e;
+  }
+}
+
+.overview-text {
+  white-space: pre-line;
+  line-height: 1.55;
+  font-size: 0.87rem;
+  color: #26424c;
+  margin: 0 0 0.75rem;
+}
+
+.overview-sources {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.overview-sources-label {
+  font-size: 0.72rem;
+  color: #7a9299;
+}

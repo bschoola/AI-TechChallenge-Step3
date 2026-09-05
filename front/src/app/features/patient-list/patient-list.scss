@@ -1,0 +1,98 @@
+.list-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+
+  h1 {
+    margin: 0 0 0.25rem;
+    font-size: 1.6rem;
+    color: #103a4d;
+  }
+
+  .subtitle {
+    margin: 0;
+    color: #5c7a85;
+  }
+}
+
+.search-field {
+  min-width: 280px;
+}
+
+.state-box {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 3rem 1rem;
+  justify-content: center;
+  color: #5c7a85;
+
+  &.error {
+    color: #b3261e;
+  }
+}
+
+.patient-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.patient-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem 1.25rem;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.15s ease;
+
+  &:hover {
+    box-shadow: 0 4px 14px rgba(16, 58, 77, 0.12);
+    transform: translateY(-1px);
+  }
+}
+
+.patient-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 50%;
+  background: #e4f2f4;
+  color: #0f7c8c;
+}
+
+.patient-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  overflow: hidden;
+}
+
+.patient-name {
+  font-weight: 600;
+  color: #103a4d;
+}
+
+.patient-meta {
+  font-size: 0.85rem;
+  color: #5c7a85;
+}
+
+.patient-history {
+  font-size: 0.8rem;
+  color: #7a9299;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.patient-arrow {
+  margin-left: auto;
+  color: #5c7a85;
+}

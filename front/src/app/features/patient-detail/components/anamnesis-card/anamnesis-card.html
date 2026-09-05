@@ -1,0 +1,154 @@
+<section class="anamnesis-card">
+  <div class="anamnesis-header">
+    <div class="anamnesis-header-left">
+      <div class="anamnesis-icon">
+        <mat-icon>description</mat-icon>
+      </div>
+      <h2>Anamnese</h2>
+    </div>
+    @if (anamnesis(); as a) {
+      <span class="anamnesis-meta">
+        @if (a.data_registro) {
+          Registrado em {{ a.data_registro }}
+        }
+        @if (a.profissional_responsavel) {
+          · {{ a.profissional_responsavel }}
+        }
+      </span>
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="anamnesis-state">
+      <mat-spinner diameter="28" />
+      <span>Carregando anamnese...</span>
+    </div>
+  } @else if (notRegistered()) {
+    <div class="anamnesis-state">
+      <mat-icon>info_outline</mat-icon>
+      <span>Este paciente ainda não possui anamnese registrada.</span>
+    </div>
+  } @else if (errorMessage()) {
+    <div class="anamnesis-state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ errorMessage() }}</span>
+    </div>
+  } @else if (anamnesis(); as a) {
+    <div class="anamnesis-body">
+      @if (a.queixa_principal) {
+        <p class="lead-text">{{ a.queixa_principal }}</p>
+      }
+      @if (a.historia_doenca_atual) {
+        <p class="body-text">{{ a.historia_doenca_atual }}</p>
+      }
+
+      <div class="anamnesis-divider"></div>
+
+      <h3 class="section-title">Antecedentes</h3>
+      <div class="field-grid">
+        @if (a.historia_patologica_pregressa) {
+          <div class="field">
+            <span class="field-label">Patológica pregressa</span>
+            <p class="field-text">{{ a.historia_patologica_pregressa }}</p>
+          </div>
+        }
+        @if (a.historia_familiar) {
+          <div class="field">
+            <span class="field-label">Familiar</span>
+            <p class="field-text">{{ a.historia_familiar }}</p>
+          </div>
+        }
+        @if (a.historia_ginecologica_obstetrica) {
+          <div class="field">
+            <span class="field-label">Ginecológica / obstétrica</span>
+            <p class="field-text">{{ a.historia_ginecologica_obstetrica }}</p>
+          </div>
+        }
+        @if (a.cirurgias_previas) {
+          <div class="field">
+            <span class="field-label">Cirurgias prévias</span>
+            <p class="field-text">{{ a.cirurgias_previas }}</p>
+          </div>
+        }
+      </div>
+
+      <div class="anamnesis-divider"></div>
+
+      <h3 class="section-title">Hábitos e medicações</h3>
+      <div class="field-grid">
+        @if (a.medicamentos_em_uso) {
+          <div class="field">
+            <span class="field-label">Medicamentos em uso</span>
+            <p class="field-text">{{ a.medicamentos_em_uso }}</p>
+          </div>
+        }
+        @if (a.alergias) {
+          <div class="field">
+            <span class="field-label">Alergias</span>
+            <p class="field-text">{{ a.alergias }}</p>
+          </div>
+        }
+        @if (a.tabagismo) {
+          <div class="field">
+            <span class="field-label">Tabagismo</span>
+            <p class="field-text">{{ a.tabagismo }}</p>
+          </div>
+        }
+        @if (a.etilismo) {
+          <div class="field">
+            <span class="field-label">Etilismo</span>
+            <p class="field-text">{{ a.etilismo }}</p>
+          </div>
+        }
+        @if (a.atividade_fisica) {
+          <div class="field">
+            <span class="field-label">Atividade física</span>
+            <p class="field-text">{{ a.atividade_fisica }}</p>
+          </div>
+        }
+      </div>
+
+      @if (vitalSigns().length > 0) {
+        <div class="anamnesis-divider"></div>
+
+        <h3 class="section-title">Sinais vitais</h3>
+        <div class="vitals-row">
+          @for (sinal of vitalSigns(); track sinal.label) {
+            <div class="vital-tile">
+              <span class="vital-label">{{ sinal.label }}</span>
+              <span class="vital-value">{{ sinal.value }}</span>
+            </div>
+          }
+        </div>
+      }
+
+      @if (a.exame_fisico) {
+        <div class="anamnesis-divider"></div>
+        <h3 class="section-title">Exame físico</h3>
+        <p class="body-text">{{ a.exame_fisico }}</p>
+      }
+
+      @if (a.hipotese_diagnostica || a.conduta) {
+        <div class="anamnesis-divider"></div>
+        <h3 class="section-title">Avaliação e conduta</h3>
+
+        @if (a.hipotese_diagnostica) {
+          <div class="field">
+            <span class="field-label">Hipótese diagnóstica</span>
+            <p class="field-text">{{ a.hipotese_diagnostica }}</p>
+          </div>
+        }
+
+        @if (a.conduta) {
+          <div class="conduct-box">
+            <mat-icon>task_alt</mat-icon>
+            <div class="field">
+              <span class="field-label">Conduta</span>
+              <p class="field-text">{{ a.conduta }}</p>
+            </div>
+          </div>
+        }
+      }
+    </div>
+  }
+</section>

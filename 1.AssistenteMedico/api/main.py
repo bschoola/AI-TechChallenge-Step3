@@ -11,6 +11,7 @@ if str(_BASE_DIR) not in sys.path:
     sys.path.insert(0, str(_BASE_DIR))
 
 from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from agent import tools
@@ -33,6 +34,16 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="Assistente Medico Virtual — OncoTech Fase 3",
     lifespan=lifespan,
+)
+
+# Libera o front-end Angular (ng serve, porta padrao 4200) para consumir a API
+# em desenvolvimento local.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:4200"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -78,6 +89,34 @@ class ExameDetailResponse(BaseModel):
     observacoes: str | None = None
 
 
+class AnamneseResponse(BaseModel):
+    id: int
+    paciente_id: int
+    data_registro: str | None = None
+    profissional_responsavel: str | None = None
+    queixa_principal: str | None = None
+    historia_doenca_atual: str | None = None
+    historia_patologica_pregressa: str | None = None
+    historia_familiar: str | None = None
+    historia_ginecologica_obstetrica: str | None = None
+    medicamentos_em_uso: str | None = None
+    alergias: str | None = None
+    cirurgias_previas: str | None = None
+    tabagismo: str | None = None
+    etilismo: str | None = None
+    atividade_fisica: str | None = None
+    pressao_arterial: str | None = None
+    frequencia_cardiaca: str | None = None
+    frequencia_respiratoria: str | None = None
+    temperatura_c: str | None = None
+    saturacao_o2: str | None = None
+    peso_kg: float | None = None
+    altura_cm: float | None = None
+    exame_fisico: str | None = None
+    hipotese_diagnostica: str | None = None
+    conduta: str | None = None
+
+
 @app.get("/")
 def root():
     return {"status": "ok", "docs": "/docs"}
@@ -118,6 +157,27 @@ def list_patient_exams(paciente_id: int) -> list[ExameResumoResponse]:
     except Exception as exc:  # noqa: BLE001 — resposta de erro generica de proposito
         raise HTTPException(status_code=500, detail=f"Erro ao consultar exames: {exc}") from exc
     return [ExameResumoResponse(**e) for e in exames]
+
+
+@app.get("/patients/{paciente_id}/anamnesis", response_model=AnamneseResponse)
+def get_patient_anamnesis(paciente_id: int) -> AnamneseResponse:
+    """Ficha de anamnese completa do paciente (queixa principal, historias medica/
+    familiar/ginecologica, habitos, sinais vitais, exame fisico, hipotese
+    diagnostica e conduta). 404 se o paciente nao existir; 404 tambem se o
+    paciente existir mas ainda nao tiver anamnese registrada.
+    """
+    if not tools.paciente_existe(paciente_id):
+        raise HTTPException(status_code=404, detail=f"Paciente {paciente_id} nao encontrado.")
+    try:
+        anamnese = tools.get_anamnese(paciente_id)
+    except Exception as exc:  # noqa: BLE001 — resposta de erro generica de proposito
+        raise HTTPException(status_code=500, detail=f"Erro ao consultar anamnese: {exc}") from exc
+    if anamnese is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Paciente {paciente_id} nao possui anamnese registrada.",
+        )
+    return AnamneseResponse(**anamnese)
 
 
 @app.get("/exams/{exame_id}", response_model=ExameDetailResponse)

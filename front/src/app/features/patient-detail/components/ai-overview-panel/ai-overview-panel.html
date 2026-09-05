@@ -1,0 +1,40 @@
+<mat-card class="overview-card">
+  <div class="overview-header">
+    <span class="overview-title">
+      <span class="overview-icon">
+        <mat-icon>auto_awesome</mat-icon>
+      </span>
+      Visão geral da IA
+    </span>
+    @if (!loading()) {
+      <button mat-icon-button matTooltip="Gerar novamente" aria-label="Gerar novamente" (click)="reload()">
+        <mat-icon>refresh</mat-icon>
+      </button>
+    }
+  </div>
+
+  @if (loading()) {
+    <div class="overview-state">
+      <mat-spinner diameter="28" />
+      <span>Analisando anamnese, exames e histórico do paciente...</span>
+    </div>
+  } @else if (errorMessage()) {
+    <div class="overview-state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ errorMessage() }}</span>
+    </div>
+  } @else if (response()) {
+    <p class="overview-text">{{ response()!.resposta }}</p>
+
+    @if (response()!.fontes.length > 0) {
+      <div class="overview-sources">
+        <span class="overview-sources-label">Fontes:</span>
+        <mat-chip-set>
+          @for (fonte of response()!.fontes; track fonte) {
+            <mat-chip>{{ fonte }}</mat-chip>
+          }
+        </mat-chip-set>
+      </div>
+    }
+  }
+</mat-card>

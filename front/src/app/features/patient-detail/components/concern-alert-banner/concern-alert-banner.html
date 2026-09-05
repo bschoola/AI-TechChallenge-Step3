@@ -1,0 +1,14 @@
+@if (visible()) {
+  <div class="concern-banner" role="alert">
+    <mat-icon aria-hidden="true">warning</mat-icon>
+    <div class="concern-text">
+      <span class="concern-title">Ponto de atenção sinalizado pela IA</span>
+      @if (alerta()) {
+        <span class="concern-message">{{ alerta() }}</span>
+      }
+      @if (requerValidacaoHumana()) {
+        <span class="concern-message">Esta resposta requer validação humana obrigatória.</span>
+      }
+    </div>
+  </div>
+}

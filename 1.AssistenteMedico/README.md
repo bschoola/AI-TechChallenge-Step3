@@ -26,7 +26,7 @@ Resposta + fontes citadas + log de auditoria
 ```
 1.AssistenteMedico/
 ├── data/
-│   ├── raw/            # protocolos, FAQs, laudos-modelo (dados sintéticos)
+│   ├── raw/            # protocolos e laudos-modelo (sintéticos) + FAQs (MedQuAD/PubMedQA traduzidos)
 │   └── processed/       # dataset.jsonl (fine-tuning) + chroma/ + prontuarios_mock.db
 ├── finetuning/          # pipeline de fine-tuning QLoRA (+ notebook Colab)
 ├── rag/                 # ingestão e chain de RAG (LangChain)
@@ -48,7 +48,7 @@ python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# 1. Preparar dataset sintético
+# 1. Preparar dataset (protocolos/laudos sintéticos + FAQs MedQuAD/PubMedQA traduzidos)
 python finetuning/prepare_dataset.py
 
 # 2. Indexar protocolos no RAG

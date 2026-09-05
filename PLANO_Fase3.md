@@ -93,29 +93,43 @@ Cada nó é uma função Python simples (`state -> state`) — é exatamente o d
 
 ### 2.7 "Prontuário" estruturado
 
-Sem acesso a sistema hospitalar real, simulamos com **SQLite** (`data/prontuarios_mock.db`), com uma tabela `pacientes` (id, nome fictício, histórico) e `exames` (paciente_id, tipo, status: pendente/concluído). É consultado como uma **tool do LangChain** (function calling), não hardcoded no prompt.
+Sem acesso a sistema hospitalar real, simulamos com **SQLite** (`data/prontuarios_mock.db`), com tabelas `pacientes` (id, nome fictício, histórico, sexo, data de nascimento), `exames` (paciente_id, tipo, status: pendente/concluído, datas, resultado) e `anamnese` (1 registro por paciente: queixa principal, histórias médica/familiar/ginecológica, hábitos, sinais vitais, exame físico, hipótese diagnóstica e conduta — ficha de anamnese completa, também mockada). É consultado como uma **tool do LangChain** (function calling), não hardcoded no prompt. Exposto também via API (`GET /patients/{id}/anamnesis`).
 
 ---
 
 ## 3. Dataset
 
-A FIAP sugere PubMedQA e MedQuAD (ambos em inglês, focados em conhecimento médico geral) — bons como *complemento* de conhecimento geral, mas não substituem o "dado interno do hospital" que o desafio pede. Como não há hospital real, a saída é gerar **dados sintéticos** e documentar isso como decisão consciente de curadoria/anonimização "by design" (não há PII porque nada é real).
+**Atualização de 05/09/2026 — decisão final tomada pelo usuário:** ao invés de usar
+PubMedQA/MedQuAD apenas como complemento opcional, o usuário optou por
+**substituir totalmente** as FAQs sintéticas do Hospital Vida Nova por pares
+instrução→resposta reais, traduzidos e resumidos a partir dessas duas bases
+(50 pares, filtrados para oncologia mamária). Motivo: usar diretamente as
+bases sugeridas pela FIAP em vez de dado sintético. Os protocolos (RAG) e os
+modelos de laudo/receita permanecem sintéticos, pois não há equivalente
+disso nas bases públicas. Detalhe completo, composição final e ressalvas
+(tradução automática sem revisão humana, desvio do requisito de "dado
+interno") estão em `1.AssistenteMedico/data/raw/README.md` e
+`1.AssistenteMedico/data/raw/faqs/_FONTE.md` — isso deve ser citado
+explicitamente no relatório técnico como decisão consciente.
 
-Sugestão de composição:
+Composição final de `data/raw/`:
 
-| Conjunto | Tamanho alvo | Uso |
-|---|---|---|
-| Protocolos clínicos fictícios (curtos, por especialidade/condição) | 30–50 documentos | Indexados no RAG (Chroma) |
-| Perguntas frequentes de médicos + resposta padrão | 100–150 pares instrução→resposta | Fine-tuning (formato tipo Alpaca: `instruction`, `input`, `output`) |
-| Modelos de laudo/receita fictícios | 15–20 exemplos | Fine-tuning (ensina formato/tom) |
-| Amostra traduzida/adaptada do MedQuAD ou PubMedQA (opcional) | 50–100 pares | Complemento de conhecimento geral no fine-tuning ou RAG |
+| Conjunto | Tamanho | Origem | Uso |
+|---|---|---|---|
+| Protocolos clínicos fictícios | 30–50 documentos | Sintético (Hospital Vida Nova) | Indexados no RAG (Chroma) |
+| FAQs instrução→resposta (oncologia mamária) | 50 pares | Traduzido/resumido de MedQuAD (CC BY 4.0) e PubMedQA (MIT) | Fine-tuning |
+| Modelos de laudo/receita fictícios | 5 exemplos | Sintético (Hospital Vida Nova) | Fine-tuning (ensina formato/tom) |
 
-Formato de treino: JSONL, um exemplo por linha:
+Formato de treino: JSONL, um exemplo por linha (mantido inalterado):
 ```json
-{"instruction": "Paciente com histórico de hipertensão pergunta se pode tomar ibuprofeno.", "input": "", "output": "Segundo o protocolo interno de anti-inflamatórios (Protocolo AINE-03)... [resposta] Esta sugestão não substitui avaliação médica direta."}
+{"instruction": "Inibidores da aromatase aumentam o risco cardiovascular em mulheres na pós-menopausa com câncer de mama inicial, em comparação ao tamoxifeno?", "input": "", "output": "Uma metanálise encontrou risco maior de eventos cardiovasculares graves... Fonte: achado de um estudo científico individual indexado no PubMed (PubMedQA) -- não é uma diretriz clínica consolidada."}
 ```
 
-Gerar esse dataset com apoio de um LLM (Claude/GPT) é uma abordagem legítima e comum em projetos acadêmicos — só precisa constar no relatório como "dataset sintético gerado com apoio de IA generativa, curado manualmente pelo grupo".
+Histórico (decisão original, antes de 05/09/2026, mantido para referência): a
+ideia inicial era gerar dados 100% sintéticos e usar PubMedQA/MedQuAD apenas
+como complemento opcional de 50–100 pares, para preservar o requisito de
+"dado interno do hospital" pedido pelo PDF do desafio. Essa abordagem foi
+substituída pela decisão acima.
 
 ---
 

@@ -1,0 +1,175 @@
+.anamnesis-card {
+  display: block;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 28px 32px;
+  box-shadow: 0 2px 10px rgba(16, 58, 77, 0.07);
+}
+
+.anamnesis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 20px;
+}
+
+.anamnesis-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+
+  h2 {
+    margin: 0;
+    font-size: 19px;
+    font-weight: 700;
+    color: #103a4d;
+  }
+}
+
+.anamnesis-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: #0f7c8c;
+  color: #ffffff;
+}
+
+.anamnesis-meta {
+  font-size: 0.78rem;
+  color: #7a9299;
+}
+
+.anamnesis-state {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: #5c7a85;
+  padding: 1rem 0 0.5rem;
+  font-size: 0.9rem;
+
+  &.error {
+    color: #b3261e;
+  }
+}
+
+.anamnesis-body {
+  display: flex;
+  flex-direction: column;
+}
+
+.anamnesis-divider {
+  height: 1px;
+  background: #eef2f3;
+  margin: 1.1rem 0;
+}
+
+.section-title {
+  margin: 0 0 0.75rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #0f7c8c;
+}
+
+.lead-text {
+  margin: 0 0 0.6rem;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: #103a4d;
+}
+
+.body-text {
+  margin: 0;
+  font-size: 14.5px;
+  line-height: 1.65;
+  color: #26424c;
+}
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem 1.5rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.field-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #7a9299;
+}
+
+.field-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #26424c;
+}
+
+.vitals-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.vital-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  background: #f7fafb;
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  min-width: 76px;
+}
+
+.vital-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #7a9299;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.vital-value {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #103a4d;
+}
+
+.conduct-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  background: #eef5f6;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+  margin-top: 0.85rem;
+
+  mat-icon {
+    color: #0f7c8c;
+    margin-top: 0.1rem;
+  }
+
+  .field-label {
+    color: #0f7c8c;
+  }
+}
+
+@media (max-width: 640px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+}

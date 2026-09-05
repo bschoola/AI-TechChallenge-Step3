@@ -1,0 +1,60 @@
+<mat-card class="exams-card">
+  <div class="exams-header">
+    <div class="exams-icon">
+      <mat-icon>assignment</mat-icon>
+    </div>
+    <h2>Exames</h2>
+  </div>
+
+  @if (loading()) {
+    <div class="exams-state">
+      <mat-spinner diameter="28" />
+      <span>Carregando exames...</span>
+    </div>
+  } @else if (errorMessage()) {
+    <div class="exams-state error">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ errorMessage() }}</span>
+    </div>
+  } @else {
+    <div class="exams-columns">
+      <div class="exams-column">
+        <span class="column-label done">Realizados ({{ concluidos().length }})</span>
+        <div class="exam-list">
+          @if (concluidos().length === 0) {
+            <p class="empty-hint">Nenhum exame realizado registrado.</p>
+          }
+          @for (exam of concluidos(); track exam.id) {
+            <button type="button" class="exam-row" (click)="select(exam)">
+              <mat-icon class="exam-row-icon done">check_circle</mat-icon>
+              <div class="exam-row-info">
+                <span class="exam-type">{{ exam.tipo }}</span>
+                <span class="exam-dates">Realizado em {{ exam.data_realizacao || '—' }}</span>
+              </div>
+              <mat-icon class="exam-row-arrow">chevron_right</mat-icon>
+            </button>
+          }
+        </div>
+      </div>
+
+      <div class="exams-column">
+        <span class="column-label pending">Pendentes ({{ pendentes().length }})</span>
+        <div class="exam-list">
+          @if (pendentes().length === 0) {
+            <p class="empty-hint">Nenhum exame pendente para este paciente.</p>
+          }
+          @for (exam of pendentes(); track exam.id) {
+            <button type="button" class="exam-row" (click)="select(exam)">
+              <mat-icon class="exam-row-icon pending">schedule</mat-icon>
+              <div class="exam-row-info">
+                <span class="exam-type">{{ exam.tipo }}</span>
+                <span class="exam-dates">Solicitado em {{ exam.data_solicitacao || '—' }}</span>
+              </div>
+              <mat-icon class="exam-row-arrow">chevron_right</mat-icon>
+            </button>
+          }
+        </div>
+      </div>
+    </div>
+  }
+</mat-card>

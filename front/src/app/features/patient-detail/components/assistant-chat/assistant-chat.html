@@ -1,0 +1,70 @@
+<mat-card class="chat-card">
+  <div class="chat-title">
+    <span class="chat-icon">
+      <mat-icon>forum</mat-icon>
+    </span>
+    Assistente para a consulta
+  </div>
+
+  <div class="chat-history">
+    @if (entries().length === 0) {
+      <p class="chat-empty">
+        Pergunte algo sobre este paciente — por exemplo, sobre a anamnese, exames ou condutas
+        possíveis.
+      </p>
+    }
+
+    @for (entry of entries(); track entry) {
+      <div class="chat-entry">
+        <div class="chat-bubble question">{{ entry.pergunta }}</div>
+
+        @if (entry.loading) {
+          <div class="chat-bubble answer loading">
+            <mat-spinner diameter="16" />
+            <span>Pensando...</span>
+          </div>
+        } @else if (entry.erro) {
+          <div class="chat-bubble answer error">
+            <mat-icon>error_outline</mat-icon>
+            <span>{{ entry.erro }}</span>
+          </div>
+        } @else if (entry.resposta) {
+          <div class="chat-bubble answer">
+            <p>{{ entry.resposta.resposta }}</p>
+
+            @if (entry.resposta.alerta || entry.resposta.requer_validacao_humana) {
+              <div class="chat-alert">
+                <mat-icon>warning</mat-icon>
+                <span>{{ entry.resposta.alerta || 'Requer validação humana.' }}</span>
+              </div>
+            }
+
+            @if (entry.resposta.fontes.length > 0) {
+              <div class="chat-sources">
+                Fontes: {{ entry.resposta.fontes.join(', ') }}
+              </div>
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
+
+  <form class="chat-input" (ngSubmit)="send()">
+    <input
+      class="chat-text-input"
+      name="question"
+      placeholder="Pergunte ao assistente..."
+      [(ngModel)]="question"
+      autocomplete="off"
+    />
+    <button
+      type="submit"
+      class="chat-send-button"
+      aria-label="Enviar"
+      [disabled]="!question.trim()"
+    >
+      <mat-icon>send</mat-icon>
+    </button>
+  </form>
+</mat-card>
