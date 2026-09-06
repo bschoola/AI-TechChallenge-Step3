@@ -14,6 +14,8 @@ if str(_BASE_DIR) not in sys.path:
 
 from agent import tools
 from agent.guardrails import check_response
+from agent.overview_summarizer import merge_similar_bullets
+from agent.scope_guard import FORA_DE_ESCOPO_RESPOSTA, classify_scope
 from rag.chain import ask as rag_ask
 from rag.chain import ask_overview as rag_ask_overview
 
@@ -65,6 +67,52 @@ def rotear_geracao(state: dict) -> dict:
     geral — sem duplicar a logica de checagem de exames pendentes para os dois
     tipos de interacao.
     """
+    return state
+
+
+def classificar_escopo(state: dict) -> dict:
+    """Guardrail de escopo do chat (agent/scope_guard.py): roda so no caminho de
+    chat (tipo_interacao == 'chat'), antes de montar contexto do paciente e
+    chamar o LLM. Decide, por similaridade RELATIVA de embeddings (ancoras
+    clinicas vs. ancoras fora de escopo -- ver historico no docstring de
+    agent/scope_guard.py), se a pergunta livre do medico e sobre o dominio
+    clinico do assistente.
+
+    Existe para resolver um problema observado em uso real: perguntas fora do
+    dominio (ex. "onde ir na praia perto de Sao Paulo?", "devo trocar a vela de
+    ignicao do carro?") faziam o modelo tentar recusar e, no mesmo texto,
+    misturar pedacos do contexto do paciente que estava no prompt -- um modelo
+    pequeno fine-tuned em QA factual tende a "completar" em vez de recusar de
+    forma seca quando ja tem dado clinico disponivel no contexto. A aresta
+    condicional em agent/graph.py usa 'dentro_do_escopo' para decidir entre
+    buscar_contexto_rag_e_gerar_resposta (que injeta o contexto do paciente) e
+    responder_fora_de_escopo (que nunca chega a ver esse contexto).
+
+    As duas similaridades (dentro/fora) e a margem entre elas sao guardadas no
+    estado (e vao pro log de auditoria em log_auditoria abaixo) para dar
+    transparencia sobre a decisao e permitir recalibrar SCOPE_MARGIN com casos
+    reais depois -- foi assim que a primeira versao (limiar absoluto) foi
+    identificada como insuficiente.
+    """
+    resultado = classify_scope(state["pergunta"])
+    state["dentro_do_escopo"] = resultado.dentro_do_escopo
+    state["similaridade_escopo_dentro"] = resultado.similaridade_dentro
+    state["similaridade_escopo_fora"] = resultado.similaridade_fora
+    state["similaridade_escopo"] = resultado.margem
+    return state
+
+
+def responder_fora_de_escopo(state: dict) -> dict:
+    """Executado quando classificar_escopo marca a pergunta como fora do escopo
+    clinico (aresta condicional em agent/graph.py). Resposta fixa em codigo, NAO
+    gerada pelo LLM -- e exatamente o ponto: sem chamar o modelo aqui, nao ha
+    contexto do paciente disponivel para ele "completar" a recusa com dado
+    clinico irrelevante. Converge em validar_seguranca como qualquer outra
+    resposta, entao ainda passa pelos guardrails e pelo log de auditoria
+    normalmente.
+    """
+    state["resposta_bruta"] = FORA_DE_ESCOPO_RESPOSTA
+    state["fontes"] = []
     return state
 
 
@@ -141,14 +189,22 @@ def _parse_overview_sections(texto: str) -> tuple[list[str], list[str]]:
     formato pedido a risca. Se os marcadores nao aparecerem, devolve a resposta
     inteira como um unico ponto relevante em vez de listas vazias — o front ainda
     mostra algo util em vez de uma tela em branco.
+
+    Cada lista passa por merge_similar_bullets (agent/overview_summarizer.py)
+    antes de retornar: o modelo tende a gerar um item por variacao de um mesmo
+    template (ex.: "Paciente nao apresenta sinais de comprometimento X"
+    repetido para varios X em vez de um so item citando todos os X) -- ver
+    discussao com o usuario. O prompt tambem pede consolidacao, mas a funcao
+    de merge e a rede de seguranca deterministica para quando o modelo nao
+    segue essa instrucao.
     """
     match = _OVERVIEW_SECTION_PATTERN.search(texto or "")
     if not match:
         texto_limpo = (texto or "").strip()
         return ([texto_limpo] if texto_limpo else [], [])
 
-    pontos_relevantes = _extract_bullets(match.group("relevante") or "")
-    pontos_atencao = _extract_bullets(match.group("atencao") or "")
+    pontos_relevantes = merge_similar_bullets(_extract_bullets(match.group("relevante") or ""))
+    pontos_atencao = merge_similar_bullets(_extract_bullets(match.group("atencao") or ""))
     return pontos_relevantes, pontos_atencao
 
 
@@ -194,6 +250,10 @@ def log_auditoria(state: dict) -> dict:
         "tipo_interacao": state.get("tipo_interacao", "chat"),
         "paciente_id": state.get("paciente_id"),
         "pergunta": state.get("pergunta"),
+        "dentro_do_escopo": state.get("dentro_do_escopo"),
+        "similaridade_escopo": state.get("similaridade_escopo"),
+        "similaridade_escopo_dentro": state.get("similaridade_escopo_dentro"),
+        "similaridade_escopo_fora": state.get("similaridade_escopo_fora"),
         "exames_pendentes": state.get("exames_pendentes", []),
         "alerta": state.get("alerta"),
         "fontes": state.get("fontes", []),

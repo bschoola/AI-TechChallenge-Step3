@@ -20,6 +20,30 @@ from rag.ingest import CHROMA_PERSIST_DIR
 # Quantos chunks recuperar por pergunta — ver PLANO_Fase3.md secao 2.4 (RAG).
 RETRIEVER_TOP_K = 4
 
+# Tamanho maximo de geracao. O chat responde UMA pergunta (400 tokens sobra); a
+# visao geral pede DOIS blocos (RELEVANTE + ATENCAO, ate 5 itens cada) e na
+# pratica estourava 400 tokens e cortava a resposta no meio de uma palavra (ver
+# logs/audit.jsonl e discussao com o usuario) -- por isso tem um teto proprio,
+# maior. Ainda e um teto, nao uma garantia: se o modelo entrar num loop
+# degenerado (ver REPETITION_PENALTY/NO_REPEAT_NGRAM_SIZE abaixo) a resposta
+# pode cortar de novo com um valor mais alto so adiando o problema.
+CHAT_MAX_NEW_TOKENS = 400
+OVERVIEW_MAX_NEW_TOKENS = 800
+
+# Controles de repeticao do pipeline transformers (aplicados aos dois casos).
+# Adicionados depois de observar, em uso real, o modelo entrar em loop
+# repetindo a mesma frase/padrao ate estourar o teto de tokens (ex.: uma visao
+# geral que gerou "hipovitaminosis B32, hipovitaminosis B33, ... B37" ate
+# cortar no meio da palavra) -- sintoma classico de amostragem sem penalidade
+# de repeticao em modelos pequenos. repetition_penalty desincentiva reusar
+# tokens ja gerados; no_repeat_ngram_size proibe repetir a mesma sequencia
+# exata de 3 tokens (pega frases inteiras repetidas, tipo "terapia de
+# reabilitacao ... terapia de reabilitacao"). Valores conservadores -- nao
+# aparecem em nenhum benchmark deste projeto, so evitam o pior caso; se a
+# qualidade das respostas piorar, o primeiro suspeito e REPETITION_PENALTY.
+REPETITION_PENALTY = 1.15
+NO_REPEAT_NGRAM_SIZE = 3
+
 # Cache em memoria dos componentes pesados (vectorstore + modelo), para nao recarregar
 # a cada chamada de ask() — mesma ideia de lifespan em api/main.py, mas no nivel da
 # chain em si (assim tambem funciona fora do FastAPI, ex. em testes/notebooks).
@@ -60,12 +84,21 @@ def _resolve_inference_dtype() -> torch.dtype:
 
 def load_llm_and_tokenizer():
     """Carrega o modelo base + adapter LoRA treinado (finetuning/train_qlora.py ou
-    o notebook Colab) e devolve (llm, tokenizer).
+    o notebook Colab) e devolve (llm_chat, llm_overview, tokenizer).
 
-    O tokenizer e devolvido separadamente (alem de ir embutido no pipeline) porque
-    ask() precisa dele para montar o prompt via apply_chat_template, exatamente como
-    em finetuning/train_qlora.py::build_prompt — mesma formatacao em treino e
-    inferencia, senao o adapter treinado nao se comporta como esperado.
+    Dois wrappers HuggingFacePipeline em vez de um: chat e visao geral tem
+    necessidades de tamanho de saida bem diferentes (ver CHAT_MAX_NEW_TOKENS/
+    OVERVIEW_MAX_NEW_TOKENS acima) -- a visao geral pede dois blocos com ate 5
+    itens cada e estourava o teto do chat, cortando a resposta no meio de uma
+    palavra. Os dois pipelines reaproveitam o MESMO `model`/`tokenizer` ja
+    carregados (nao ha peso duplicado em memoria, so dois objetos de
+    configuracao de geracao diferentes por cima do mesmo modelo).
+
+    O tokenizer e devolvido separadamente (alem de ir embutido nos pipelines)
+    porque ask()/ask_overview() precisam dele para montar o prompt via
+    apply_chat_template, exatamente como em finetuning/train_qlora.py::
+    build_prompt — mesma formatacao em treino e inferencia, senao o adapter
+    treinado nao se comporta como esperado.
     """
     from peft import PeftModel
     from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
@@ -89,20 +122,26 @@ def load_llm_and_tokenizer():
     )
     model = PeftModel.from_pretrained(base_model, str(ADAPTER_OUTPUT_DIR))
 
-    text_gen_pipeline = pipeline(
-        task="text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        max_new_tokens=400,
-        do_sample=True,
-        temperature=0.3,
-        # Sem isso, o pipeline devolve o prompt + a resposta concatenados — so
-        # queremos o texto gerado (ver HuggingFacePipeline._generate, que usa esse
-        # campo do retorno do pipeline diretamente).
-        return_full_text=False,
-    )
-    llm = HuggingFacePipeline(pipeline=text_gen_pipeline)
-    return llm, tokenizer
+    def _build_llm(max_new_tokens: int) -> "HuggingFacePipeline":
+        text_gen_pipeline = pipeline(
+            task="text-generation",
+            model=model,
+            tokenizer=tokenizer,
+            max_new_tokens=max_new_tokens,
+            do_sample=True,
+            temperature=0.3,
+            repetition_penalty=REPETITION_PENALTY,
+            no_repeat_ngram_size=NO_REPEAT_NGRAM_SIZE,
+            # Sem isso, o pipeline devolve o prompt + a resposta concatenados — so
+            # queremos o texto gerado (ver HuggingFacePipeline._generate, que usa esse
+            # campo do retorno do pipeline diretamente).
+            return_full_text=False,
+        )
+        return HuggingFacePipeline(pipeline=text_gen_pipeline)
+
+    llm_chat = _build_llm(CHAT_MAX_NEW_TOKENS)
+    llm_overview = _build_llm(OVERVIEW_MAX_NEW_TOKENS)
+    return llm_chat, llm_overview, tokenizer
 
 
 def _format_docs_with_sources(docs) -> str:
@@ -115,7 +154,8 @@ def _format_docs_with_sources(docs) -> str:
 
 
 def build_rag_chain() -> dict:
-    """Monta os componentes da chain: retriever (Chroma) + llm + tokenizer.
+    """Monta os componentes da chain: retriever (Chroma) + llm_chat/llm_overview +
+    tokenizer.
 
     Devolvido como dicionario (nao como uma unica Runnable encadeada) porque ask()
     precisa tanto da resposta gerada quanto dos metadados de fonte dos chunks
@@ -124,8 +164,13 @@ def build_rag_chain() -> dict:
     """
     vectorstore = load_vectorstore()
     retriever = vectorstore.as_retriever(search_kwargs={"k": RETRIEVER_TOP_K})
-    llm, tokenizer = load_llm_and_tokenizer()
-    return {"retriever": retriever, "llm": llm, "tokenizer": tokenizer}
+    llm_chat, llm_overview, tokenizer = load_llm_and_tokenizer()
+    return {
+        "retriever": retriever,
+        "llm_chat": llm_chat,
+        "llm_overview": llm_overview,
+        "tokenizer": tokenizer,
+    }
 
 
 def _get_chain() -> dict:
@@ -147,7 +192,7 @@ def ask(question: str, patient_context: str | None = None) -> RagResponse:
     """
     chain = _get_chain()
     retriever = chain["retriever"]
-    llm = chain["llm"]
+    llm = chain["llm_chat"]
     tokenizer = chain["tokenizer"]
 
     docs = retriever.invoke(question)
@@ -188,6 +233,9 @@ OVERVIEW_INSTRUCTION = (
     "pendentes, alergias, interacoes medicamentosas, divergencias entre historico e "
     "conduta (ate 5 itens; se nao houver nenhum, escreva apenas 'Nenhum ponto de "
     "atencao identificado.')\n\n"
+    "Se varios pontos seguirem exatamente o mesmo padrao (por exemplo, ausencia de "
+    "sinais em diferentes sistemas do corpo), junte-os em UM SO item citando os "
+    "sistemas separados por virgula, em vez de repetir um item para cada um.\n\n"
     "Responda EXATAMENTE nesse formato: as duas palavras 'RELEVANTE:' e 'ATENCAO:' "
     "em linhas separadas, cada uma seguida so de itens em lista iniciados por '-'. "
     "Nao escreva nada fora desses dois blocos."
@@ -203,7 +251,7 @@ def ask_overview(patient_context: str) -> RagResponse:
     insumo aqui e o caso do paciente, nao os protocolos internos do hospital.
     """
     chain = _get_chain()
-    llm = chain["llm"]
+    llm = chain["llm_overview"]
     tokenizer = chain["tokenizer"]
 
     user_content = f"Dados clinicos do paciente:\n{patient_context}\n\n{OVERVIEW_INSTRUCTION}"

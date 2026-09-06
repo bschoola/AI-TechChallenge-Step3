@@ -24,3 +24,6 @@ pydantic>=2.7.0
 # --- Utilitários ---
 python-dotenv>=1.0.0
 pandas>=2.2.0
+
+# --- Testes ---
+pytest>=8.0.0

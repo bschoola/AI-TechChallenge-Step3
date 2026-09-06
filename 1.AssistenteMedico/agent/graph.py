@@ -10,26 +10,34 @@ Ver diagrama completo em PLANO_Fase3.md, secao 2.5:
           v                                                          |
     rotear_geracao <------------------------------------------------ +
           |
-          +--(chat)-------> buscar_contexto_rag_e_gerar_resposta --+
-          |                                                         |
-          +--(visao_geral)-> gerar_visao_geral --------------------+
-                                                                     v
-                                                          validar_seguranca --(sinalizado)--> encaminhar_para_validacao_humana --+
-                                                                | (aprovado)                                                    |
-                                                                v                                                                |
-                                                          finalizar_resposta <-------------------------------------------------+
-                                                                |
-                                                                v
-                                                          log_auditoria (END)
+          +--(chat)-------> classificar_escopo --(dentro_do_escopo)--> buscar_contexto_rag_e_gerar_resposta --+
+          |                        |                                                                           |
+          |                        +--(fora_de_escopo)--> responder_fora_de_escopo -----------------------------+
+          |                                                                                                     |
+          +--(visao_geral)-> gerar_visao_geral --------------------------------------------------------------->+
+                                                                                                                 v
+                                                                                                      validar_seguranca --(sinalizado)--> encaminhar_para_validacao_humana --+
+                                                                                                            | (aprovado)                                                    |
+                                                                                                            v                                                                |
+                                                                                                      finalizar_resposta <-------------------------------------------------+
+                                                                                                            |
+                                                                                                            v
+                                                                                                      log_auditoria (END)
 
 tipo_interacao ("chat" por padrao, ou "visao_geral") decide em rotear_geracao qual
-no de geracao chamar: o chat responde a uma pergunta livre do medico
-(buscar_contexto_rag_e_gerar_resposta, com retrieval de protocolos via RAG); a
-visao geral (gerar_visao_geral, sem retrieval) sintetiza a anamnese/exames do
-paciente em topicos "RELEVANTE"/"ATENCAO" para o card automatico da tela do
-paciente — ver api/main.py::get_patient_overview e
-front/.../ai-overview-panel. Os dois caminhos convergem em validar_seguranca, log
-de auditoria e validacao humana inclusive.
+caminho seguir. O chat passa antes por classificar_escopo (agent/scope_guard.py):
+um guardrail de escopo por similaridade de embeddings que decide se a pergunta
+livre do medico e sobre o dominio clinico ANTES de montar contexto do paciente e
+chamar o LLM — se nao for, responder_fora_de_escopo devolve uma mensagem fixa
+sem nunca expor o contexto do paciente ao modelo (evita o modelo "completar" uma
+recusa com dado clinico irrelevante). Se for, segue para
+buscar_contexto_rag_e_gerar_resposta (com retrieval de protocolos via RAG). A
+visao geral (gerar_visao_geral, sem retrieval nem classificacao de escopo — e
+sempre sobre o proprio paciente) sintetiza a anamnese/exames em topicos
+"RELEVANTE"/"ATENCAO" para o card automatico da tela do paciente — ver
+api/main.py::get_patient_overview e front/.../ai-overview-panel. Todos os
+caminhos convergem em validar_seguranca, log de auditoria e validacao humana
+inclusive.
 """
 
 import sys
@@ -49,6 +57,10 @@ class AgentState(TypedDict, total=False):
     paciente_id: int
     pergunta: str
     tipo_interacao: str  # "chat" (default) ou "visao_geral" — ver rotear_geracao
+    dentro_do_escopo: bool  # so preenchido no caminho chat — ver classificar_escopo
+    similaridade_escopo: float  # idem — margem (dentro - fora) do guardrail de escopo (agent/scope_guard.py)
+    similaridade_escopo_dentro: float  # idem — similaridade contra ancoras clinicas
+    similaridade_escopo_fora: float  # idem — similaridade contra ancoras fora de escopo
     exames_pendentes: list[str]
     alerta: str | None
     resposta_bruta: str
@@ -69,6 +81,10 @@ def _tipo_interacao(state: AgentState) -> str:
     return "visao_geral" if state.get("tipo_interacao") == "visao_geral" else "chat"
 
 
+def _dentro_do_escopo(state: AgentState) -> str:
+    return "dentro_do_escopo" if state.get("dentro_do_escopo") else "fora_de_escopo"
+
+
 def _foi_sinalizado(state: AgentState) -> str:
     return "sinalizado" if state.get("requer_validacao_humana") else "aprovado"
 
@@ -81,6 +97,8 @@ def build_graph():
     graph.add_node("verificar_exames_pendentes", nodes.verificar_exames_pendentes)
     graph.add_node("emitir_alerta_exame", nodes.emitir_alerta_exame)
     graph.add_node("rotear_geracao", nodes.rotear_geracao)
+    graph.add_node("classificar_escopo", nodes.classificar_escopo)
+    graph.add_node("responder_fora_de_escopo", nodes.responder_fora_de_escopo)
     graph.add_node("buscar_contexto_rag_e_gerar_resposta", nodes.buscar_contexto_rag_e_gerar_resposta)
     graph.add_node("gerar_visao_geral", nodes.gerar_visao_geral)
     graph.add_node("validar_seguranca", nodes.validar_seguranca)
@@ -105,11 +123,20 @@ def build_graph():
         "rotear_geracao",
         _tipo_interacao,
         {
-            "chat": "buscar_contexto_rag_e_gerar_resposta",
+            "chat": "classificar_escopo",
             "visao_geral": "gerar_visao_geral",
         },
     )
+    graph.add_conditional_edges(
+        "classificar_escopo",
+        _dentro_do_escopo,
+        {
+            "dentro_do_escopo": "buscar_contexto_rag_e_gerar_resposta",
+            "fora_de_escopo": "responder_fora_de_escopo",
+        },
+    )
     graph.add_edge("buscar_contexto_rag_e_gerar_resposta", "validar_seguranca")
+    graph.add_edge("responder_fora_de_escopo", "validar_seguranca")
     graph.add_edge("gerar_visao_geral", "validar_seguranca")
 
     graph.add_conditional_edges(
