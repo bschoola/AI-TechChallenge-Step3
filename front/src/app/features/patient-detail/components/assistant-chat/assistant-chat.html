@@ -51,13 +51,17 @@
   </div>
 
   <form class="chat-input" (ngSubmit)="send()">
-    <input
+    <textarea
+      #questionInput
       class="chat-text-input"
       name="question"
+      rows="1"
       placeholder="Pergunte ao assistente..."
       [(ngModel)]="question"
+      (input)="autoGrowInput(questionInput)"
+      (keydown)="onQuestionKeydown($event)"
       autocomplete="off"
-    />
+    ></textarea>
     <button
       type="submit"
       class="chat-send-button"

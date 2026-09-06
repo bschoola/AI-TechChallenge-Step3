@@ -1,4 +1,4 @@
-import { Component, inject, input, signal } from '@angular/core';
+import { Component, ElementRef, inject, input, signal, ViewChild } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
@@ -28,6 +28,12 @@ export class AssistantChat {
   readonly entries = signal<ChatEntry[]>([]);
   question = '';
 
+  @ViewChild('questionInput') private questionInput?: ElementRef<HTMLTextAreaElement>;
+
+  /** Altura máxima (px) até onde o campo cresce sozinho ao digitar; acima
+   * disso o usuário ainda pode arrastar a alça de redimensionamento manualmente. */
+  private readonly maxAutoGrowHeight = 160;
+
   send(): void {
     const pergunta = this.question.trim();
     if (!pergunta) return;
@@ -35,6 +41,7 @@ export class AssistantChat {
     const entry: ChatEntry = { pergunta, loading: true, timestamp: new Date() };
     this.entries.update((list) => [...list, entry]);
     this.question = '';
+    this.resetInputHeight();
 
     this.assistantService.ask({ paciente_id: this.patientId(), pergunta }).subscribe({
       next: (resposta) => {
@@ -44,6 +51,27 @@ export class AssistantChat {
         this.updateEntry(entry, { loading: false, erro: this.describeError(err) });
       },
     });
+  }
+
+  /** Envia com Enter; permite quebra de linha com Shift+Enter. */
+  onQuestionKeydown(event: KeyboardEvent): void {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      this.send();
+    }
+  }
+
+  /** Cresce o textarea conforme o conteúdo digitado, até maxAutoGrowHeight. */
+  autoGrowInput(textarea: HTMLTextAreaElement): void {
+    textarea.style.height = 'auto';
+    textarea.style.height = `${Math.min(textarea.scrollHeight, this.maxAutoGrowHeight)}px`;
+  }
+
+  private resetInputHeight(): void {
+    const el = this.questionInput?.nativeElement;
+    if (el) {
+      el.style.height = 'auto';
+    }
   }
 
   private updateEntry(target: ChatEntry, changes: Partial<ChatEntry>): void {

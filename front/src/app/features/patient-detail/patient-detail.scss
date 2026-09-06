@@ -161,6 +161,23 @@
   gap: 1rem;
   position: sticky;
   top: 80px;
+  /* Preenche a altura visível da tela (abaixo do topbar), em vez de só o
+   * tamanho do conteúdo — é o que permite o assistente de IA esticar até o
+   * fim da tela disponível. */
+  height: calc(100vh - 96px);
+  overflow: hidden;
+}
+
+app-ai-overview-panel {
+  display: block;
+  flex-shrink: 0;
+}
+
+app-assistant-chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 
 @media (max-width: 900px) {
@@ -174,5 +191,12 @@
 
   .patient-side {
     position: static;
+    height: auto;
+    overflow: visible;
+  }
+
+  app-assistant-chat {
+    flex: initial;
+    min-height: auto;
   }
 }
