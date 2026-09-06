@@ -3,7 +3,6 @@ retorna o dicionario de estado do LangGraph (ver AgentState em graph.py).
 """
 
 import json
-import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -14,7 +13,7 @@ if str(_BASE_DIR) not in sys.path:
 
 from agent import tools
 from agent.guardrails import check_response
-from agent.overview_summarizer import merge_similar_bullets
+from agent.overview_parser import parse_overview_sections
 from agent.scope_guard import FORA_DE_ESCOPO_RESPOSTA, classify_scope
 from rag.chain import ask as rag_ask
 from rag.chain import ask_overview as rag_ask_overview
@@ -24,14 +23,6 @@ from rag.chain import ask_overview as rag_ask_overview
 # e a decisao de seguranca tomada pelo grafo.
 AUDIT_LOG_DIR = _BASE_DIR / "logs"
 AUDIT_LOG_PATH = AUDIT_LOG_DIR / "audit.jsonl"
-
-# Extrai as duas secoes 'RELEVANTE:'/'ATENCAO:' pedidas no prompt de
-# rag/chain.py::OVERVIEW_INSTRUCTION. Aceita 'ATENCAO' e 'ATENÇÃO'.
-_OVERVIEW_SECTION_PATTERN = re.compile(
-    r"RELEVANTE\s*:(?P<relevante>.*?)(?:ATEN[CÇ][AÃ]O\s*:(?P<atencao>.*))?$",
-    re.IGNORECASE | re.DOTALL,
-)
-
 
 def receber_paciente(state: dict) -> dict:
     """No de entrada: valida paciente_id sempre; 'pergunta' e obrigatoria so no
@@ -157,57 +148,6 @@ def gerar_visao_geral(state: dict) -> dict:
     return state
 
 
-# Bullet precisa ser "- item" ou "* item" (com espaco depois do marcador) - so
-# "startswith('*')" colidiria com **negrito** em markdown, como o aviso que
-# agent/guardrails.py acrescenta a resposta sinalizada ("**Atencao:** ...").
-_BULLET_PATTERN = re.compile(r"^[-*]\s+(.*)$")
-
-
-def _extract_bullets(texto: str) -> list[str]:
-    """Extrai linhas de lista (iniciadas por '-' ou '* ') de um bloco de texto,
-    descartando linhas em branco ou texto solto fora do formato de lista esperado
-    (ex.: o aviso que agent/guardrails.py acrescenta quando a resposta e
-    sinalizada, que vem como paragrafo solto apos as duas secoes).
-    """
-    bullets = []
-    for linha in texto.splitlines():
-        linha = linha.strip()
-        match = _BULLET_PATTERN.match(linha)
-        if match:
-            item = match.group(1).strip()
-            if item:
-                bullets.append(item)
-    return bullets
-
-
-def _parse_overview_sections(texto: str) -> tuple[list[str], list[str]]:
-    """Quebra a resposta da 'visao geral' nas duas listas RELEVANTE:/ATENCAO:
-    pedidas pelo prompt (rag/chain.py::OVERVIEW_INSTRUCTION).
-
-    Fallback deliberado: o modelo fine-tuned e pequeno e foi treinado
-    majoritariamente em QA factual (MedQuAD/PubMedQA), entao pode nao seguir o
-    formato pedido a risca. Se os marcadores nao aparecerem, devolve a resposta
-    inteira como um unico ponto relevante em vez de listas vazias — o front ainda
-    mostra algo util em vez de uma tela em branco.
-
-    Cada lista passa por merge_similar_bullets (agent/overview_summarizer.py)
-    antes de retornar: o modelo tende a gerar um item por variacao de um mesmo
-    template (ex.: "Paciente nao apresenta sinais de comprometimento X"
-    repetido para varios X em vez de um so item citando todos os X) -- ver
-    discussao com o usuario. O prompt tambem pede consolidacao, mas a funcao
-    de merge e a rede de seguranca deterministica para quando o modelo nao
-    segue essa instrucao.
-    """
-    match = _OVERVIEW_SECTION_PATTERN.search(texto or "")
-    if not match:
-        texto_limpo = (texto or "").strip()
-        return ([texto_limpo] if texto_limpo else [], [])
-
-    pontos_relevantes = merge_similar_bullets(_extract_bullets(match.group("relevante") or ""))
-    pontos_atencao = merge_similar_bullets(_extract_bullets(match.group("atencao") or ""))
-    return pontos_relevantes, pontos_atencao
-
-
 def validar_seguranca(state: dict) -> dict:
     resultado = check_response(state["resposta_bruta"])
     state["resposta_final"] = resultado.safe_response
@@ -215,7 +155,7 @@ def validar_seguranca(state: dict) -> dict:
     state["padroes_sinalizados"] = resultado.matched_patterns
 
     if state.get("tipo_interacao") == "visao_geral":
-        pontos_relevantes, pontos_atencao = _parse_overview_sections(state["resposta_final"])
+        pontos_relevantes, pontos_atencao = parse_overview_sections(state["resposta_final"])
         state["pontos_relevantes"] = pontos_relevantes
         state["pontos_atencao"] = pontos_atencao
 

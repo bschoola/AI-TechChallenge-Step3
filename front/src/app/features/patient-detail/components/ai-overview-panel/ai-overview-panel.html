@@ -31,23 +31,29 @@
           <mat-icon>checklist</mat-icon>
           Pontos relevantes
         </span>
-        <ul class="overview-list">
+        <ul class="overview-list relevant">
           @for (ponto of response()!.pontos_relevantes; track ponto) {
-            <li>{{ ponto }}</li>
+            <li>
+              <span class="bullet-dot"></span>
+              <span class="bullet-text">{{ ponto }}</span>
+            </li>
           }
         </ul>
       </div>
     }
 
     @if (response()!.pontos_atencao.length > 0) {
-      <div class="overview-section">
+      <div class="overview-section attention-block">
         <span class="overview-section-title attention">
           <mat-icon>warning</mat-icon>
           Pontos de atenção
         </span>
         <ul class="overview-list attention">
           @for (ponto of response()!.pontos_atencao; track ponto) {
-            <li>{{ ponto }}</li>
+            <li>
+              <span class="bullet-dot"></span>
+              <span class="bullet-text">{{ ponto }}</span>
+            </li>
           }
         </ul>
       </div>
