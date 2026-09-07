@@ -12,7 +12,9 @@ if str(_BASE_DIR) not in sys.path:
     sys.path.insert(0, str(_BASE_DIR))
 
 from agent import tools
+from agent.demographic_guard import check_age_coherence
 from agent.guardrails import check_response
+from agent.overview_filter import filtrar_pontos
 from agent.overview_parser import parse_overview_sections
 from agent.scope_guard import FORA_DE_ESCOPO_RESPOSTA, classify_scope
 from rag.chain import ask as rag_ask
@@ -33,6 +35,11 @@ def receber_paciente(state: dict) -> dict:
     assert state.get("paciente_id") is not None, "paciente_id e obrigatorio"
     if state.get("tipo_interacao", "chat") == "chat":
         assert state.get("pergunta"), "pergunta e obrigatoria para o chat"
+
+    # Carregada uma vez no no de entrada porque e usada em dois pontos distintos
+    # do grafo: no contexto do prompt (via montar_contexto_clinico) e na checagem
+    # de coerencia etaria da resposta, ja em validar_seguranca.
+    state["demografia"] = tools.get_demografia_paciente(state["paciente_id"])
     return state
 
 
@@ -142,6 +149,9 @@ def gerar_visao_geral(state: dict) -> dict:
     protocolos internos do hospital.
     """
     contexto_clinico = tools.montar_contexto_clinico(state["paciente_id"])
+    # Guardado no estado porque validar_seguranca precisa dele para ancorar os
+    # pontos gerados no prontuario deste paciente (agent/overview_filter.py).
+    state["contexto_clinico"] = contexto_clinico
     rag_response = rag_ask_overview(contexto_clinico)
     state["resposta_bruta"] = rag_response.answer
     state["fontes"] = rag_response.sources
@@ -154,10 +164,35 @@ def validar_seguranca(state: dict) -> dict:
     state["requer_validacao_humana"] = resultado.is_flagged
     state["padroes_sinalizados"] = resultado.matched_patterns
 
+    # Segunda checagem, encadeada sobre a saida da primeira: a resposta pode
+    # acumular as duas ressalvas, e basta uma delas para exigir validacao humana.
+    demografia = state.get("demografia") or {}
+    coerencia = check_age_coherence(state["resposta_final"], demografia.get("idade"))
+    state["resposta_final"] = coerencia.safe_response
+    state["termos_etarios_incoerentes"] = coerencia.termos_incoerentes
+    state["requer_validacao_humana"] = state["requer_validacao_humana"] or coerencia.is_flagged
+
     if state.get("tipo_interacao") == "visao_geral":
         pontos_relevantes, pontos_atencao = parse_overview_sections(state["resposta_final"])
-        state["pontos_relevantes"] = pontos_relevantes
-        state["pontos_atencao"] = pontos_atencao
+
+        # O parser resolve a FORMA da resposta; o filtro resolve o CONTEUDO —
+        # so passa o que e rastreavel ao prontuario deste paciente, e descarta a
+        # secao inteira quando a geracao degenera. Ver agent/overview_filter.py.
+        contexto = state.get("contexto_clinico")
+        filtro_relevantes = filtrar_pontos(pontos_relevantes, contexto)
+        filtro_atencao = filtrar_pontos(pontos_atencao, contexto)
+
+        state["pontos_relevantes"] = filtro_relevantes.itens
+        state["pontos_atencao"] = filtro_atencao.itens
+        state["pontos_descartados"] = (
+            filtro_relevantes.descartados_sem_ancora
+            + filtro_relevantes.descartados_por_familia
+            + filtro_relevantes.descartados_por_limite
+            + filtro_atencao.descartados_sem_ancora
+            + filtro_atencao.descartados_por_familia
+            + filtro_atencao.descartados_por_limite
+        )
+        state["geracao_degenerada"] = filtro_relevantes.degenerado or filtro_atencao.degenerado
 
     return state
 
@@ -201,7 +236,11 @@ def log_auditoria(state: dict) -> dict:
         "resposta_final": state.get("resposta_final"),
         "pontos_relevantes": state.get("pontos_relevantes", []),
         "pontos_atencao": state.get("pontos_atencao", []),
+        "pontos_descartados": state.get("pontos_descartados"),
+        "geracao_degenerada": state.get("geracao_degenerada"),
         "padroes_sinalizados": state.get("padroes_sinalizados", []),
+        "idade_paciente": (state.get("demografia") or {}).get("idade"),
+        "termos_etarios_incoerentes": state.get("termos_etarios_incoerentes", []),
         "requer_validacao_humana": state.get("requer_validacao_humana"),
         "status": state.get("status"),
     }

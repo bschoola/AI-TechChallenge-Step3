@@ -28,7 +28,13 @@ RETRIEVER_TOP_K = 4
 # degenerado (ver REPETITION_PENALTY/NO_REPEAT_NGRAM_SIZE abaixo) a resposta
 # pode cortar de novo com um valor mais alto so adiando o problema.
 CHAT_MAX_NEW_TOKENS = 400
-OVERVIEW_MAX_NEW_TOKENS = 800
+# A visao geral pede dois blocos de ate 5 itens curtos — na pratica, menos de
+# 200 palavras. Um teto generoso demais nao "da espaco para uma resposta melhor":
+# da espaco para o modelo continuar gerando depois de ja ter dito o que tinha a
+# dizer, que e exatamente quando ele deriva para associacao livre. O teto e a
+# primeira contencao; o filtro de ancoragem (agent/overview_filter.py) e a
+# ultima.
+OVERVIEW_MAX_NEW_TOKENS = 450
 
 # Controles de repeticao do pipeline transformers (aplicados aos dois casos).
 # Adicionados depois de observar, em uso real, o modelo entrar em loop
@@ -122,14 +128,19 @@ def load_llm_and_tokenizer():
     )
     model = PeftModel.from_pretrained(base_model, str(ADAPTER_OUTPUT_DIR))
 
-    def _build_llm(max_new_tokens: int) -> "HuggingFacePipeline":
+    def _build_llm(max_new_tokens: int, do_sample: bool = True) -> "HuggingFacePipeline":
+        # do_sample=False (greedy) para a visao geral: extrair pontos de uma ficha
+        # num formato fixo e tarefa estruturada, nao criativa. A amostragem so
+        # adiciona variancia — e variancia, num modelo pequeno, e por onde comeca
+        # a deriva para termos cada vez mais distantes do caso.
+        parametros_amostragem = {"temperature": 0.3} if do_sample else {}
         text_gen_pipeline = pipeline(
             task="text-generation",
             model=model,
             tokenizer=tokenizer,
             max_new_tokens=max_new_tokens,
-            do_sample=True,
-            temperature=0.3,
+            do_sample=do_sample,
+            **parametros_amostragem,
             repetition_penalty=REPETITION_PENALTY,
             no_repeat_ngram_size=NO_REPEAT_NGRAM_SIZE,
             # Sem isso, o pipeline devolve o prompt + a resposta concatenados — so
@@ -140,7 +151,7 @@ def load_llm_and_tokenizer():
         return HuggingFacePipeline(pipeline=text_gen_pipeline)
 
     llm_chat = _build_llm(CHAT_MAX_NEW_TOKENS)
-    llm_overview = _build_llm(OVERVIEW_MAX_NEW_TOKENS)
+    llm_overview = _build_llm(OVERVIEW_MAX_NEW_TOKENS, do_sample=False)
     return llm_chat, llm_overview, tokenizer
 
 
@@ -236,9 +247,11 @@ OVERVIEW_INSTRUCTION = (
     "Se varios pontos seguirem exatamente o mesmo padrao (por exemplo, ausencia de "
     "sinais em diferentes sistemas do corpo), junte-os em UM SO item citando os "
     "sistemas separados por virgula, em vez de repetir um item para cada um.\n\n"
+    "Cada item deve citar algo que esta escrito no contexto do paciente acima. Nao "
+    "liste doencas, complicacoes ou termos que nao aparecem nesse contexto.\n\n"
     "Responda EXATAMENTE nesse formato: as duas palavras 'RELEVANTE:' e 'ATENCAO:' "
-    "em linhas separadas, cada uma seguida so de itens em lista iniciados por '-'. "
-    "Nao escreva nada fora desses dois blocos."
+    "em linhas separadas, cada uma seguida so de itens em lista iniciados por '-', "
+    "no maximo 5 itens por bloco. Nao escreva nada fora desses dois blocos."
 )
 
 

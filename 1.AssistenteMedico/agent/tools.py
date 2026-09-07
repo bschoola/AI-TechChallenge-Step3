@@ -1592,6 +1592,34 @@ _SINAIS_VITAIS_CAMPOS = [
 ]
 
 
+def get_demografia_paciente(paciente_id: int) -> dict | None:
+    """Sexo, data de nascimento e idade calculada de um paciente.
+
+    Existe separada de list_pacientes() porque o grafo precisa desses campos para
+    UM paciente especifico em dois pontos distintos — montar o contexto do prompt
+    e checar a coerencia etaria da resposta (agent/demographic_guard.py) — e
+    filtrar a lista inteira para achar um id seria desperdicio.
+
+    Retorna None se o paciente nao existir. `idade` e calculada a cada consulta a
+    partir de data_nascimento (ver _calcular_idade), nunca armazenada.
+    """
+    with closing(sqlite3.connect(DB_PATH)) as conn:
+        cur = conn.execute(
+            "SELECT id, nome_ficticio, sexo, data_nascimento FROM pacientes WHERE id = ?",
+            (paciente_id,),
+        )
+        row = cur.fetchone()
+    if row is None:
+        return None
+    return {
+        "id": row[0],
+        "nome_ficticio": row[1],
+        "sexo": row[2],
+        "data_nascimento": row[3],
+        "idade": _calcular_idade(row[3]),
+    }
+
+
 def montar_contexto_clinico(paciente_id: int) -> str | None:
     """Monta um unico bloco de texto com o historico resumido + a ficha de
     anamnese completa do paciente (quando existir), pronto para ser injetado no
@@ -1607,6 +1635,24 @@ def montar_contexto_clinico(paciente_id: int) -> str | None:
     (rag_ask trata None simplesmente omitindo essa secao do prompt).
     """
     partes: list[str] = []
+
+    # Idade e sexo abrem o bloco de proposito. Sao os dois dados que mais
+    # condicionam conduta clinica (a apresentacao, a investigacao e o
+    # procedimento indicado para um mesmo diagnostico mudam completamente entre
+    # uma crianca e um idoso), e ate entao nao chegavam ao modelo: nem
+    # get_historico_paciente nem os campos de anamnese os contem. Sem esse dado
+    # no prompt, um modelo pequeno preenche a lacuna com a faixa etaria mais
+    # frequente na literatura do diagnostico — o que produz conduta correta para
+    # o diagnostico e errada para o paciente.
+    demografia = get_demografia_paciente(paciente_id)
+    if demografia:
+        identificacao = []
+        if demografia.get("idade") is not None:
+            identificacao.append(f"{demografia['idade']} anos")
+        if demografia.get("sexo"):
+            identificacao.append(f"sexo {demografia['sexo'].lower()}")
+        if identificacao:
+            partes.append("Paciente: " + ", ".join(identificacao) + ".")
 
     historico = get_historico_paciente(paciente_id)
     if historico:

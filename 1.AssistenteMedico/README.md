@@ -24,7 +24,9 @@ Pergunta do médico + ID do paciente          |  Abertura da tela do paciente
     ├─ verifica exames pendentes (SQLite mock) e emite alerta
     ├─ [chat] classifica escopo por embeddings — recusa fora do domínio clínico
     ├─ [chat] recupera protocolos no Chroma (RAG) e gera resposta com a LLM fine-tuned
+    ├─ confere a coerência etária da resposta com a idade real do paciente
     ├─ [visão geral] sintetiza anamnese/exames em RELEVANTE / ATENÇÃO (sem RAG)
+    ├─ [visão geral] filtra os pontos gerados: só passa o que está ancorado no prontuário
     ├─ valida segurança (filtro de linguagem de prescrição direta)
     └─ registra a interação completa em logs/audit.jsonl
                               │
@@ -87,8 +89,8 @@ O front-end Angular consome a API em `http://localhost:8001` — ver [`../front/
 | `GET` | `/patients/{id}/exams` | Exames do paciente com status, data de solicitação e de realização; 404 se o paciente não existir |
 | `GET` | `/exams/{id}` | Detalhe completo de um exame (resultado, médico solicitante, observações) |
 | `GET` | `/patients/{id}/anamnesis` | Ficha de anamnese completa; 404 se o paciente não existir ou não tiver anamnese |
-| `POST` | `/assistant/ask` | Pergunta livre do médico (`paciente_id` + `pergunta`) → resposta + fontes citadas |
-| `POST` | `/patients/{id}/overview` | Visão geral automática por IA (sem corpo) → `pontos_relevantes` / `pontos_atencao` estruturados |
+| `POST` | `/assistant/ask` | Pergunta livre do médico (`paciente_id` + `pergunta`) → resposta + fontes citadas + `termos_etarios_incoerentes` |
+| `POST` | `/patients/{id}/overview` | Visão geral automática por IA (sem corpo) → `pontos_relevantes` / `pontos_atencao` estruturados, mais `pontos_descartados` e `geracao_degenerada` |
 
 ```bash
 curl http://localhost:8001/patients                        # lista os 32 pacientes
@@ -109,14 +111,16 @@ curl -X POST http://localhost:8001/assistant/ask \
 
 | Pasta | Conteúdo | Uso | Origem |
 |---|---|---|---|
-| `data/raw/faqs/` | 51 pares instrução→resposta sobre oncologia mamária | **Fine-tuning** | MedQuAD (NIH, CC BY 4.0) e PubMedQA (MIT), filtrados para câncer de mama e traduzidos com apoio de LLM |
+| `data/raw/faqs/` | 94 pares instrução→resposta | **Fine-tuning** | 43 sintéticos internos, multiespecialidade (prefixo `hvn_`) + 51 de MedQuAD (NIH, CC BY 4.0) e PubMedQA (MIT), oncologia mamária, traduzidos com apoio de LLM |
 | `data/raw/laudos_modelo/` | 5 modelos de laudo/parecer/encaminhamento | **Fine-tuning** (formato e tom) | Sintético |
-| `data/raw/protocolos/` | 5 protocolos clínicos do hospital fictício | **RAG** (conhecimento citável) | Sintético |
+| `data/raw/protocolos/` | 32 protocolos clínicos do hospital fictício, cobrindo todas as especialidades atendidas | **RAG** (conhecimento citável) | Sintético |
 | `data/processed/prontuarios_mock.db` | 32 pacientes cobrindo 30 quadros clínicos distintos (clínica médica, urgência, pneumologia, infectologia, neurologia, cirurgia, ginecologia, oncologia e outras), 38 exames, 32 anamneses completas | **Tools** (dado em tempo real) | Sintético, SQLite |
 
-O dataset final de fine-tuning tem **55 exemplos** (47 treino / 8 validação). Atribuição de licença e a ressalva sobre tradução automática sem revisão manual estão em [`data/raw/README.md`](data/raw/README.md) e [`data/raw/faqs/_FONTE.md`](data/raw/faqs/_FONTE.md).
+O dataset final de fine-tuning tem **98 exemplos** (84 treino / 14 validação), e a base do RAG tem **122 chunks** a partir dos 32 protocolos. Atribuição de licença e a ressalva sobre tradução automática sem revisão manual estão em [`data/raw/README.md`](data/raw/README.md) e [`data/raw/faqs/_FONTE.md`](data/raw/faqs/_FONTE.md).
 
-> **Cobertura da base de conhecimento.** O prontuário é multiespecialidade, mas os 5 protocolos do RAG e as 51 FAQs de fine-tuning são de oncologia mamária. Para quadros de outras especialidades não há protocolo pertinente a recuperar — ver `RELATORIO_TECNICO.md`, seções 5.4 e 5.8.
+> **Reindexação do RAG.** `rag/ingest.py` reconstrói o índice do zero a cada execução (`reset_vectorstore`). `Chroma.from_documents` sobre um `persist_directory` existente *acrescenta* documentos em vez de substituí-los, e executar a ingestão repetidamente duplicaria todos os chunks — o que degrada a recuperação em silêncio, fazendo o retriever devolver N cópias do mesmo trecho em vez de N trechos distintos.
+
+> **Alterou os dados?** Mudança em `faqs/` ou `laudos_modelo/` exige rodar `prepare_dataset.py` **e re-treinar o modelo**. Mudança em `protocolos/` exige apenas `rag/ingest.py`.
 
 > O seed do prontuário mock (`agent/tools.py::init_mock_db`) é 100% idempotente (`INSERT OR IGNORE` por id): reiniciar a API preenche o que faltar sem duplicar nem sobrescrever, e migra bancos antigos automaticamente. Não é preciso apagar o `.db` ao atualizar o projeto.
 
@@ -127,6 +131,8 @@ O dataset final de fine-tuning tem **55 exemplos** (47 treino / 8 validação). 
 | **System prompt** | `finetuning/config.py::SYSTEM_PROMPT` | Um único prompt, usado tanto no treino quanto na inferência — o modelo aprende a responder dentro dos mesmos limites que o guardrail depois verifica |
 | **Guardrail de escopo** | `agent/scope_guard.py` | Antes de montar o contexto do paciente, classifica a pergunta por similaridade **relativa** de embeddings (âncoras dentro vs. fora do domínio clínico). Fora de escopo → resposta fixa em código, que nunca vê o prontuário |
 | **Guardrail de prescrição** | `agent/guardrails.py` | Filtro de padrões de prescrição direta ("prescrevo", "tome X mg"). Nunca descarta a resposta: marca `requer_validacao_humana=True` e acrescenta a ressalva |
+| **Coerência etária** | `agent/demographic_guard.py` | Sinaliza resposta ancorada numa faixa etária que não é a do paciente (conduta pediátrica para paciente idoso, por exemplo). Só dispara quando *nenhuma* faixa citada contém a idade — menção contrastiva não gera alarme |
+| **Filtro de ancoragem** | `agent/overview_filter.py` | Só exibe um ponto da visão geral se ele for rastreável ao prontuário do paciente. Impõe o teto de 5 itens, colapsa famílias morfológicas e descarta o bloco inteiro quando a geração degenera (`geracao_degenerada`) |
 | **Validação humana** | `agent/nodes.py::encaminhar_para_validacao_humana` | Nó dedicado no grafo — respostas sinalizadas saem com `status="aguardando_validacao_humana"` |
 | **Explainability** | `rag/chain.py` + `agent/nodes.py::log_auditoria` | Toda resposta de chat cita os protocolos recuperados; o log guarda pergunta, fontes, resposta bruta, resposta final, padrões sinalizados e as similaridades do guardrail de escopo |
 
@@ -135,7 +141,7 @@ O dataset final de fine-tuning tem **55 exemplos** (47 treino / 8 validação). 
 ## Avaliação do modelo
 
 ```bash
-python finetuning/evaluate.py                # base vs. fine-tuned nas 8 perguntas de validação
+python finetuning/evaluate.py                # base vs. fine-tuned nas 14 perguntas de validação
 python finetuning/evaluate.py --limit 3      # amostra menor, para teste rápido
 python finetuning/evaluate.py --skip-base    # só o modelo fine-tuned
 ```
@@ -147,10 +153,10 @@ Geração **greedy** (`do_sample=False`) para ser reproduzível — diferente do
 ## Testes
 
 ```bash
-python -m pytest tests/ -q     # 38 testes
+python -m pytest tests/ -q     # 68 testes
 ```
 
-Cobrem lógica pura, sem carregar LLM nem modelo de embeddings: guardrail de escopo, consolidação de bullets repetidos, parsing da visão geral (com regressão de cada caso real observado em produção) e métricas de avaliação.
+Cobrem lógica pura, sem carregar LLM nem modelo de embeddings: guardrail de escopo, consolidação de bullets repetidos, parsing da visão geral, filtro de ancoragem, coerência etária e métricas de avaliação. Cada caso real observado em produção entra como regressão — a saída degenerada de 167 itens, a resposta pediátrica para paciente de 66 anos.
 
 ## Fine-tuning: GPU (recomendado) ou CPU (fallback)
 
@@ -162,4 +168,4 @@ QLoRA "de verdade" (4-bit via `bitsandbytes`) exige GPU com CUDA. O caminho reco
 
 ## Aviso
 
-Assistente de **apoio** à decisão clínica, em contexto acadêmico. Nenhuma resposta deve ser usada como prescrição sem validação de um profissional de saúde habilitado — ver `agent/guardrails.py`. As FAQs de treino foram traduzidas automaticamente, sem revisão clínica humana: o conteúdo é material de estudo, não fonte validada para uso real.
+Assistente de **apoio** à decisão clínica, em contexto acadêmico. Nenhuma resposta deve ser usada como prescrição sem validação de um profissional de saúde habilitado — ver `agent/guardrails.py`. Os protocolos são sintéticos e parte das FAQs foi traduzida automaticamente, sem revisão clínica humana: o conteúdo é material de estudo, não fonte validada para uso real.

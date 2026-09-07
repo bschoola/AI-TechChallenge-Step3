@@ -20,7 +20,7 @@ Repositório: `AI-TechChallenge-Step3`
 
 O sistema é um **assistente médico virtual de apoio à decisão clínica** que atende **todas as especialidades** de um hospital fictício — o "Hospital Vida Nova", cujo painel médico é apresentado sob a marca "Hospital VEinstein". Ele não substitui o julgamento clínico: organiza informação do prontuário, recupera protocolos internos e redige respostas que precisam ser validadas por um profissional habilitado.
 
-O escopo é hospitalar geral. O prontuário eletrônico simulado cobre clínica médica, urgência, ortopedia, pneumologia, cardiologia, endocrinologia, gastroenterologia, urologia, neurologia, otorrinolaringologia, oftalmologia, dermatologia, infectologia, cirurgia geral, ginecologia e oncologia. O assistente é acionado da mesma forma para qualquer um desses casos.
+O escopo é hospitalar geral, e as três camadas de dados acompanham esse escopo. O prontuário eletrônico simulado, a base de protocolos indexada no RAG e o corpus de fine-tuning cobrem clínica médica, urgência, ortopedia, pneumologia, cardiologia, endocrinologia, gastroenterologia, urologia, neurologia, otorrinolaringologia, oftalmologia, dermatologia, infectologia, cirurgia geral, ginecologia e oncologia, além de temas transversais de segurança do paciente. O assistente é acionado da mesma forma para qualquer um desses casos.
 
 A arquitetura combina três técnicas com papéis distintos:
 
@@ -39,12 +39,12 @@ A orquestração é feita por um **grafo de estados em LangGraph**, que escolhe 
 | Modelo base | `Qwen/Qwen2.5-1.5B-Instruct` (Apache 2.0) |
 | Técnica de fine-tuning | QLoRA 4-bit (NF4) + LoRA r=16 |
 | Parâmetros treináveis | ≈ 4,36 M (0,28% do total) |
-| Dataset de fine-tuning | 55 exemplos (47 treino / 8 validação) |
-| Base de conhecimento (RAG) | 5 protocolos → 50 chunks no Chroma |
+| Dataset de fine-tuning | 98 exemplos (84 treino / 14 validação) |
+| Base de conhecimento (RAG) | 32 protocolos → 122 chunks no Chroma |
 | Prontuário simulado | 32 pacientes · 30 quadros clínicos distintos · 38 exames · 32 anamneses |
 | Grafo LangGraph | 12 nós, 4 arestas condicionais |
 | Endpoints da API | 7 |
-| Testes automatizados | 38 |
+| Testes automatizados | 68 |
 
 ---
 
@@ -62,26 +62,29 @@ O dataset de fine-tuning é montado a partir de duas pastas em `data/raw/`. Uma 
 
 | Fonte | Arquivos | Papel | Origem |
 |---|---:|---|---|
-| `faqs/` | 51 | Pares instrução→resposta clínica | **MedQuAD** (NIH) e **PubMedQA**, filtrados para câncer de mama e vertidos para PT-BR |
+| `faqs/` | 94 | Pares instrução→resposta clínica | 43 sintéticas internas (prefixo `hvn_`) + 51 derivadas de **MedQuAD** (NIH) e **PubMedQA** |
 | `laudos_modelo/` | 5 | Formato e tom de documentos: laudo, parecer, encaminhamento, orientação pós-procedimento | Sintético, escrito para o hospital fictício |
-| `protocolos/` | 5 | **Fora do fine-tuning** — base de conhecimento do RAG | Sintético |
+| `protocolos/` | 32 | **Fora do fine-tuning** — base de conhecimento do RAG | Sintético |
 
 A separação entre o material de fine-tuning e o material de RAG é estrutural: protocolo é *conhecimento a consultar e citar*. Treinar o modelo diretamente nos protocolos destruiria a rastreabilidade — ele passaria a "saber" o protocolo sem conseguir apontar a origem da informação, que é o requisito de explainability do desafio.
 
-**Composição das 51 FAQs por sub-base de origem:**
+**Composição das 94 FAQs por origem**, identificável pelo prefixo do nome do arquivo:
 
-| Prefixo do arquivo | Sub-base | Arquivos |
-|---|---|---:|
-| `cancergov_` | MedQuAD / CancerGov | 17 |
-| `pubmedqa_` | PubMedQA | 15 |
-| `seniorhealth_` | MedQuAD / SeniorHealth | 8 |
-| `gard_` | MedQuAD / GARD | 5 |
-| `ghr_` | MedQuAD / Genetics Home Reference | 3 |
-| `mplustopics_` | MedQuAD / MedlinePlus Health Topics | 3 |
+| Prefixo | Origem | Arquivos | Cobertura |
+|---|---|---:|---|
+| `hvn_` | Sintético, interno ao hospital fictício | 43 | Todas as especialidades |
+| `cancergov_` | MedQuAD / CancerGov | 17 | Oncologia mamária |
+| `pubmedqa_` | PubMedQA | 15 | Oncologia mamária |
+| `seniorhealth_` | MedQuAD / SeniorHealth | 8 | Oncologia mamária |
+| `gard_` | MedQuAD / GARD | 5 | Oncologia mamária |
+| `ghr_` | MedQuAD / Genetics Home Reference | 3 | Oncologia mamária |
+| `mplustopics_` | MedQuAD / MedlinePlus Health Topics | 3 | Oncologia mamária |
 
-O PubMedQA tem formato original de *pergunta de pesquisa + abstract + conclusão sim/não/talvez*, incompatível com um par instrução→resposta clínica. Cada item foi reescrito como pergunta e resposta em prosa, preservando a conclusão do estudo. A tradução e o resumo para PT-BR foram feitos com apoio de LLM, sem revisão por profissional de saúde — o conteúdo é material de estudo, não fonte validada para uso clínico.
+As 43 FAQs internas cobrem os quadros efetivamente presentes no prontuário simulado — hipertensão, diabetes, anemia, disfunção tireoidiana, dor crônica, dor abdominal aguda, cólica renal, trauma de extremidade, trombose venosa profunda, pneumonia, asma, tosse aguda, síndromes febris, infecção urinária, gastroenterite, refluxo, cefaleia, lombalgia, otite, sinusite, conjuntivite, dermatite e hérnia inguinal — mais temas transversais de segurança: registro de alergias, interações medicamentosas, polifarmácia, sinais vitais de alerta, exames pendentes e uso racional de antimicrobianos. Cada uma referencia o protocolo interno correspondente, para que o modelo aprenda a citar a fonte institucional na resposta.
 
-**Cobertura temática.** O corpus de fine-tuning está concentrado em oncologia mamária, enquanto o sistema atende o hospital inteiro. Isso não restringe o escopo do assistente — o que o modelo aprende dessas 51 FAQs é o *formato* da resposta clínica, que generaliza para qualquer especialidade — mas é a principal lacuna de cobertura do trabalho, analisada na [seção 5.8](#58-síntese-e-limitações).
+Nenhuma FAQ interna contém posologia específica. A conduta é sempre descrita em nível de orientação e classe terapêutica, coerente com o papel do assistente e com o guardrail de prescrição que verifica a saída — treinar o modelo com texto que o próprio sistema sinalizaria seria incoerente.
+
+As 51 FAQs derivadas de bases públicas cobrem oncologia mamária. O PubMedQA tem formato original de *pergunta de pesquisa + abstract + conclusão sim/não/talvez*, incompatível com um par instrução→resposta clínica; cada item foi reescrito como pergunta e resposta em prosa, preservando a conclusão do estudo. A tradução e o resumo para PT-BR foram feitos com apoio de LLM, sem revisão por profissional de saúde — esse conteúdo é material de estudo, não fonte validada para uso clínico.
 
 **Anonimização.** Não há dado real de paciente em nenhuma etapa. MedQuAD e PubMedQA são bases públicas de conhecimento médico, sem informação identificável. O prontuário simulado é integralmente gerado, com nomes explicitamente fictícios ("Paciente Fictício A" … "Paciente Fictício AF"). A anonimização é estrutural: não existe dado sensível a anonimizar.
 
@@ -94,8 +97,8 @@ flowchart TD
     A["<b>Entrada</b> — data/raw/faqs/*.md · data/raw/laudos_modelo/*.md"]
     A --> B["<b>Parse e curadoria</b><br/>seções ## Instrução / ## Resposta, com normalização de acento e caixa<br/>deduplicação exata · descarte de respostas com menos de 20 caracteres"]
     B --> E{"<b>Shuffle determinístico</b> seed = 42<br/>split 85 / 15"}
-    E --> G["dataset_train.jsonl · 47 exemplos"]
-    E --> H["dataset_val.jsonl · 8 exemplos"]
+    E --> G["dataset_train.jsonl · 84 exemplos"]
+    E --> H["dataset_val.jsonl · 14 exemplos"]
 
     style G fill:#e6f0ff,stroke:#06c
     style H fill:#fff4d6,stroke:#c90
@@ -111,10 +114,10 @@ Características da implementação:
 
 | Métrica | Valor |
 |---|---|
-| Exemplos totais | 55 (47 treino / 8 validação) |
-| Palavras por instrução | média 15,1 · mín. 8 · máx. 22 |
-| Palavras por resposta | média 94,2 · mín. 63 · máx. 138 |
-| Volume total de resposta | ≈ 5.200 palavras |
+| Exemplos totais | 98 (84 treino / 14 validação) |
+| Palavras por instrução | média 13,7 · mín. 6 · máx. 22 |
+| Palavras por resposta | média 96,4 · mín. 63 · máx. 138 |
+| Volume total de resposta | ≈ 9.400 palavras |
 
 ### 2.4 Configuração do treino
 
@@ -124,23 +127,23 @@ Características da implementação:
 
 | Hiperparâmetro | Valor | Justificativa |
 |---|---|---|
-| `LORA_R` | 16 | Posto suficiente para ajuste de estilo; valores maiores aumentam o risco de overfit em 47 exemplos |
+| `LORA_R` | 16 | Posto suficiente para ajuste de estilo; valores maiores aumentam o risco de overfit num dataset desta ordem |
 | `LORA_ALPHA` | 32 | Razão α/r = 2 |
 | `LORA_DROPOUT` | 0.05 | Regularização leve, apropriada ao dataset pequeno |
 | `LORA_TARGET_MODULES` | `q_proj`, `k_proj`, `v_proj`, `o_proj` | Apenas as projeções de atenção; incluir as camadas MLP aumentaria os parâmetros treináveis sem ganho claro para ajuste de tom |
 | `LOAD_IN_4BIT` | `True` (NF4 + double quant) | Reduz a memória do modelo base o suficiente para caber na T4 |
-| `NUM_TRAIN_EPOCHS` | 3 | Com 47 exemplos, mais épocas memorizam o conjunto |
+| `NUM_TRAIN_EPOCHS` | 3 | Com 84 exemplos, mais épocas memorizam o conjunto |
 | Batch efetivo | 8 (2 × 4 de acumulação) | Batch real de 2 cabe na VRAM da T4; a acumulação recupera a estabilidade do gradiente |
 | `LEARNING_RATE` | 2e-4 | Padrão para LoRA, bem acima do usado em fine-tuning completo |
 | `MAX_SEQ_LENGTH` | 1024 | Acomoda o maior exemplo (system prompt + instrução + resposta) |
 
-**Volume de treino:** 47 exemplos ÷ batch efetivo 8 ≈ 6 passos por época × 3 épocas = **18 passos de otimização**, confirmado pelos checkpoints salvos (`checkpoint-6`, `checkpoint-12`, `checkpoint-18`).
+**Volume de treino:** 84 exemplos ÷ batch efetivo 8 = 11 passos por época × 3 épocas = **33 passos de otimização**.
 
 **Parâmetros treináveis:** com r=16 sobre as quatro projeções de atenção, em 28 camadas de um modelo com `hidden_size=1536` e atenção agrupada (12 cabeças de consulta, 2 de chave/valor), o total é ≈ **4,36 milhões de parâmetros**, ou **0,28%** dos ≈ 1,54 bilhão do modelo. O arquivo `adapter_model.safetensors` de 17,4 MB confirma a ordem de grandeza (4,36 M × 4 bytes ≈ 17,4 MB).
 
 **Formatação do prompt.** `SYSTEM_PROMPT` está definido em um único lugar (`finetuning/config.py`) e é usado tanto no treino (`train_qlora.py::build_prompt`) quanto na inferência (`rag/chain.py::ask` e `ask_overview`), sempre através do `apply_chat_template` do tokenizer. Treino e runtime usam exatamente o mesmo template — condição para que o adapter se comporte em produção como se comportou no treino.
 
-O conteúdo do system prompt descreve os mesmos limites que o guardrail de runtime (`agent/guardrails.py`) verifica: o modelo é treinado para respeitar a regra que o sistema fiscaliza.
+O conteúdo do system prompt descreve os mesmos limites que o guardrail de runtime (`agent/guardrails.py`) verifica: o modelo é treinado para respeitar a regra que o sistema fiscaliza. A coerência vai até o dataset — nenhum dos 98 exemplos de treino dispara o filtro de prescrição.
 
 ### 2.5 Execução e artefato
 
@@ -186,7 +189,7 @@ flowchart TB
 
     subgraph DATA["Fontes de contexto"]
         DB[("SQLite<br/>32 pacientes · 38 exames<br/>32 anamneses")]
-        CH[("Chroma<br/>50 chunks<br/>5 protocolos")]
+        CH[("Chroma<br/>122 chunks<br/>32 protocolos")]
     end
 
     subgraph MODEL["Modelo"]
@@ -208,7 +211,7 @@ flowchart TB
 |---|---|---|
 | Orquestração | LangGraph | Grafo de estados; garante que todo caminho passe por guardrail e auditoria |
 | Geração | `transformers` + `peft`, via `HuggingFacePipeline` | Modelo base + adapter LoRA, servido em processo |
-| Recuperação | LangChain + Chroma | 50 chunks (500 caracteres, overlap 50) dos 5 protocolos, com metadado `fonte` |
+| Recuperação | LangChain + Chroma | 122 chunks (500 caracteres, overlap 50) dos 32 protocolos, com metadado `fonte` |
 | Embeddings | `intfloat/multilingual-e5-small` | Usado no RAG e no guardrail de escopo |
 | Prontuário | SQLite | Tabelas `pacientes`, `exames`, `anamnese`; seed idempotente |
 | API | FastAPI + Pydantic | Grafo carregado uma vez no `lifespan`, não por requisição |
@@ -242,7 +245,33 @@ Sem acesso a sistema hospitalar real, o prontuário é um SQLite consultado como
 
 O seed é idempotente por id (`INSERT OR IGNORE`): reiniciar a API preenche apenas o que falta, sem duplicar nem sobrescrever, e migra bancos criados por versões anteriores do schema.
 
-### 3.4 API
+**Contexto enviado ao modelo.** `montar_contexto_clinico` monta o bloco que vai ao prompt, e ele **abre com idade e sexo**. São os dois dados que mais condicionam conduta: para um mesmo diagnóstico, a apresentação, a investigação e o procedimento indicado mudam completamente entre uma criança e um idoso. Um modelo que não recebe a idade preenche a lacuna com a faixa etária mais frequente na literatura do diagnóstico, e produz conduta correta para o diagnóstico e errada para o paciente — ver [seção 5.6](#56-fidelidade-ao-contexto). Em seguida vêm o histórico resumido, os campos da anamnese e os sinais vitais em linha condensada.
+
+### 3.4 Base de protocolos internos
+
+A base de conhecimento consultada pelo RAG são **32 protocolos** clínicos sintéticos do hospital fictício, indexados por `rag/ingest.py`. Eles cobrem as mesmas áreas presentes no prontuário, mais temas transversais de segurança do paciente:
+
+| Código | Área | Conteúdo |
+|---|---|---|
+| `MAMA-01`, `MAMA-02`, `ONCO-01`, `ONCO-03` | Oncologia mamária | Rastreamento, conduta por BI-RADS, encaminhamento, segurança em quimioterapia |
+| `CLI-01` … `CLI-05` | Clínica médica | Hipertensão, diabetes tipo 2, anemia, disfunção tireoidiana, dor crônica generalizada |
+| `URG-01` … `URG-04` | Urgência | Dor abdominal aguda, cólica renal, trauma de extremidade, suspeita de trombose venosa profunda |
+| `PNE-01` … `PNE-03` | Pneumologia | Pneumonia adquirida na comunidade, asma, tosse aguda |
+| `INF-01` … `INF-03` | Infectologia | Triagem de síndromes febris, infecção urinária, uso racional de antimicrobianos |
+| `GAS-01`, `GAS-02` | Gastroenterologia | Gastroenterite e hidratação, doença do refluxo |
+| `NEU-01`, `NEU-02` | Neurologia | Cefaleia, lombalgia e lombociatalgia |
+| `OTO-01`, `OFT-01`, `DER-01` | Otorrino, oftalmologia, dermatologia | Otite e sinusite, olho vermelho, dermatite de contato |
+| `CIR-01` | Cirurgia geral | Hérnia inguinal e avaliação cirúrgica eletiva |
+| `SEG-01` … `SEG-04` | Segurança do paciente | Alergias e interações, sinais vitais de alerta, exames pendentes, contraste em exames de imagem |
+| `ADM-01` | Rotina | Consulta de check-up e rastreamento |
+
+Cada protocolo é estruturado em torno dos pontos que mudam a conduta: critérios diagnósticos, sinais de alarme que exigem escalonamento, e a ressalva explícita de que a decisão final é do médico responsável. Vários protocolos referenciam outros pelo código, o que dá ao retriever mais de um caminho até a informação pertinente.
+
+Nenhum protocolo contém posologia específica — o assistente é de apoio à decisão e não prescreve.
+
+**Reindexação.** `rag/ingest.py` reconstrói o índice do zero a cada execução (`reset_vectorstore`). Isso é necessário porque `Chroma.from_documents` sobre um `persist_directory` existente **acrescenta** documentos à coleção em vez de substituí-los. Sem o reset, cada execução da ingestão duplica todos os chunks, e o efeito na recuperação é silencioso e grave — ver [seção 5.4](#54-qualidade-da-recuperação-rag).
+
+### 3.5 API
 
 | Método | Rota | Descrição |
 |---|---|---|
@@ -251,14 +280,14 @@ O seed é idempotente por id (`INSERT OR IGNORE`): reiniciar a API preenche apen
 | `GET` | `/patients/{id}/exams` | Exames do paciente com status e datas |
 | `GET` | `/exams/{id}` | Detalhe completo de um exame |
 | `GET` | `/patients/{id}/anamnesis` | Ficha de anamnese completa |
-| `POST` | `/assistant/ask` | Pergunta livre do médico → resposta + fontes citadas |
+| `POST` | `/assistant/ask` | Pergunta livre do médico → resposta + fontes citadas + `termos_etarios_incoerentes` |
 | `POST` | `/patients/{id}/overview` | Visão geral automática → `pontos_relevantes` / `pontos_atencao` |
 
 **Convenção de erros:** `503` quando falta um artefato de que o assistente depende (índice do RAG ou adapter fine-tuned), `404` para paciente ou exame inexistente, `500` para o restante.
 
-### 3.5 Segurança, guardrails e explainability
+### 3.6 Segurança, guardrails e explainability
 
-Cinco camadas cobrem os requisitos de limite de atuação, logging e explainability:
+Sete camadas cobrem os requisitos de limite de atuação, logging e explainability:
 
 **1. System prompt compartilhado.** Um único texto em `finetuning/config.py`, usado no treino e no runtime, com três regras: usar o contexto fornecido; declarar explicitamente quando o contexto for insuficiente; **nunca prescrever diretamente** — sempre enquadrar como recomendação a ser validada por médico responsável.
 
@@ -270,9 +299,21 @@ A comparação é relativa, e não contra um limiar absoluto, porque o `multilin
 
 A opção por regex, e não por classificador de ML, é deliberada: em contexto clínico, um filtro simples e auditável é mais defensável que uma caixa-preta sem explicação. Ele é conservador por construção, preferindo falso-positivo a falso-negativo.
 
-**4. Nó de validação humana.** Respostas sinalizadas passam por um nó dedicado que marca `status="aguardando_validacao_humana"`. O fluxo não é interrompido — a decisão sobre um rascunho sinalizado é do médico, não do sistema.
+**4. Checagem de coerência etária** (`agent/demographic_guard.py`) — aplicada a toda resposta, procurando termos de faixa etária (`recém-nascido`, `lactente`, `criança`, `pediátrico`, `adolescente`, `idoso`, `geriátrico`) cujo intervalo de idade não contenha a idade do paciente.
 
-**5. Explainability em duas frentes.** Toda resposta de chat cita os protocolos recuperados: o metadado `fonte` é preservado desde a leitura do arquivo, antes do chunking, e retorna no campo `fontes` da API. E o log de auditoria (`logs/audit.jsonl`) grava, por interação: timestamp, tipo de interação, paciente, pergunta, decisão e similaridades numéricas do guardrail de escopo, exames pendentes, alerta, fontes citadas, resposta bruta, resposta final, pontos estruturados, padrões sinalizados e status. Uma linha JSON por interação, em modo *append*; falha de escrita do log nunca derruba uma resposta já gerada.
+A regra não é "mencionou uma faixa que não é a do paciente", e sim "mencionou faixas etárias e **nenhuma** delas contém a idade do paciente". A distinção importa: uma resposta que diz *"diferente do que ocorre em crianças, no idoso a conduta é…"* cita uma faixa incompatível, mas demonstra estar orientada pela idade certa ao citar também a compatível. O erro que se quer pegar é a resposta inteiramente ancorada na faixa errada — e essa não tem nenhum termo compatível. Sinalizar as duas produziria alarme em resposta correta, e um guardrail que dispara em resposta boa deixa de ser lido.
+
+Como o guardrail de prescrição, esta camada **não bloqueia nem reescreve**: marca `requer_validacao_humana=True` e anexa a ressalva. Os termos que dispararam vão para o log de auditoria e para a resposta da API, de forma que o revisor sabe exatamente o que procurar no texto.
+
+**5. Filtro de ancoragem da visão geral** (`agent/overview_filter.py`) — última camada antes de os pontos gerados chegarem ao médico, aplicada só ao caminho da visão geral. Enquanto o parser resolve a **forma** da resposta, este filtro resolve o **conteúdo**: um ponto só é exibido se for rastreável ao prontuário deste paciente, isto é, se compartilhar ao menos um termo de conteúdo com a ficha clínica. A comparação é feita por radical de cinco caracteres, sem acento e sem caixa, para tolerar flexão sem depender de um lematizador.
+
+O filtro também impõe em código o teto de 5 itens por bloco que o prompt pede, colapsa famílias morfológicas (três ou mais itens começando pelo mesmo radical viram um), e classifica a geração como **degenerada** quando o volume de itens excede largamente o pedido ou quando a proporção de itens ancorados é muito baixa. Numa geração degenerada o bloco inteiro é descartado, e não apenas os itens sem âncora: uma lista parcial extraída de uma geração degenerada não é confiável, porque os poucos itens ancorados podem ter casado por coincidência lexical e o médico não tem como saber de que regime de geração cada item veio.
+
+A contrapartida é assumida: a regra descarta também inferência clínica legítima que use vocabulário ausente da ficha. Num apoio à decisão clínica, exibir um achado fabricado custa mais do que omitir um achado correto que o médico obtém lendo a própria ficha e o protocolo. O número de itens descartados e o sinalizador de degeneração vão para o log de auditoria e para a resposta da API, o que torna esse custo mensurável em vez de invisível.
+
+**6. Nó de validação humana.** Respostas sinalizadas passam por um nó dedicado que marca `status="aguardando_validacao_humana"`. O fluxo não é interrompido — a decisão sobre um rascunho sinalizado é do médico, não do sistema.
+
+**7. Explainability em duas frentes.** Toda resposta de chat cita os protocolos recuperados: o metadado `fonte` é preservado desde a leitura do arquivo, antes do chunking, e retorna no campo `fontes` da API. E o log de auditoria (`logs/audit.jsonl`) grava, por interação: timestamp, tipo de interação, paciente, pergunta, decisão e similaridades numéricas do guardrail de escopo, exames pendentes, alerta, fontes citadas, resposta bruta, resposta final, pontos estruturados, padrões sinalizados e status. Uma linha JSON por interação, em modo *append*; falha de escrita do log nunca derruba uma resposta já gerada.
 
 ---
 
@@ -332,7 +373,7 @@ Três propriedades que o desenho garante:
 flowchart TD
     Q["Pergunta do médico"] --> EMB1["Embedding E5<br/>prefixo <i>query:</i>"]
     EMB1 --> RET["Chroma retriever · top_k = 4"]
-    IDX[("Índice Chroma<br/>50 chunks · 5 protocolos")] --> RET
+    IDX[("Índice Chroma<br/>122 chunks · 32 protocolos")] --> RET
     RET --> DOCS["Chunks recuperados<br/>+ metadado <b>fonte</b>"]
 
     PID["paciente_id"] --> TOOL["montar_contexto_clinico()<br/>histórico + anamnese completa"]
@@ -351,7 +392,7 @@ flowchart TD
 Duas características da implementação:
 
 - **A chain não é uma única `Runnable` LCEL encadeada.** É montada como um dicionário de componentes (`retriever`, `llm_chat`, `llm_overview`, `tokenizer`), porque `ask()` precisa da resposta gerada **e** dos metadados de fonte dos chunks — informação que se perde em uma chain LCEL que devolve apenas a string final. A explainability exigida pelo desafio determina a estrutura da chain.
-- **Dois wrappers de pipeline sobre o mesmo modelo.** `llm_chat` (400 tokens) e `llm_overview` (800 tokens) compartilham o mesmo `model` e `tokenizer` carregados: não há peso duplicado em memória, apenas duas configurações de geração. O teto maior da visão geral atende aos seus dois blocos de saída. Ambos aplicam `repetition_penalty=1.15` e `no_repeat_ngram_size=3`.
+- **Dois wrappers de pipeline sobre o mesmo modelo.** `llm_chat` e `llm_overview` compartilham o mesmo `model` e `tokenizer` carregados: não há peso duplicado em memória, apenas duas configurações de geração. O chat usa amostragem (`temperature=0.3`, 400 tokens); a visão geral usa **geração gulosa** (`do_sample=False`, 450 tokens), porque extrair pontos de uma ficha num formato fixo é tarefa estruturada, não criativa — a amostragem só adiciona variância, e variância num modelo pequeno é por onde começa a deriva. Ambos aplicam `repetition_penalty=1.15` e `no_repeat_ngram_size=3`.
 
 A visão geral usa uma variante desse fluxo, **sem retrieval**: o insumo é o caso do paciente, não os protocolos do hospital.
 
@@ -390,11 +431,13 @@ sequenceDiagram
 
 A avaliação tem duas frentes: a **comparação quantitativa** entre modelo base e modelo fine-tuned, e a **medição do comportamento do sistema em operação**, a partir das 68 interações registradas no log de auditoria.
 
+As medições de operação relatadas nas seções 5.3 a 5.7 foram obtidas com a base de protocolos e o adapter anteriores à ampliação para as demais especialidades. Elas continuam válidas como caracterização do comportamento das camadas que não mudaram — guardrail de escopo, parsing, auditoria — e como diagnóstico da configuração de recuperação. A [seção 5.9](#59-estado-de-medição) registra o que precisa ser remedido após o re-treino e a reindexação.
+
 ### 5.1 Metodologia da comparação base vs. fine-tuned
 
 `finetuning/evaluate.py` gera, para o mesmo conjunto de perguntas, as respostas do **modelo base sem adapter** e do **modelo base + adapter LoRA**, e calcula métricas comparáveis.
 
-**Conjunto de teste:** as 8 perguntas de `dataset_val.jsonl` — o split de validação, nunca usado para atualizar pesos (o `SFTTrainer` o consome apenas como `eval_dataset` para a loss). Cobre 6 perguntas clínicas e 2 pedidos de geração de documento (encaminhamento para oncologia, orientação pós-biópsia).
+**Conjunto de teste:** as 14 perguntas de `dataset_val.jsonl` — o split de validação, nunca usado para atualizar pesos (o `SFTTrainer` o consome apenas como `eval_dataset` para a loss). Por ser sorteado do conjunto completo com semente fixa, cobre tanto perguntas de oncologia mamária quanto das demais especialidades e dos temas transversais de segurança, além dos pedidos de geração de documento.
 
 **Métricas.** Nenhuma delas mede correção clínica — isso exigiria um médico avaliando as respostas, o que está fora do escopo deste trabalho. Elas medem se o fine-tuning aproximou o **comportamento** do modelo do comportamento-alvo:
 
@@ -432,8 +475,8 @@ python finetuning/evaluate.py
 
 **Hipóteses declaradas antes da execução**, para que o resultado seja interpretável e não retroajustado:
 
-1. A **taxa de ressalva** deve subir no fine-tuned — é o comportamento mais diretamente ensinado pelo system prompt repetido em 47 exemplos.
-2. O **comprimento médio** deve cair — as respostas de referência têm 94 palavras em média, bem menos do que o modelo base produz espontaneamente.
+1. A **taxa de ressalva** deve subir no fine-tuned — é o comportamento mais diretamente ensinado pelo system prompt repetido em 84 exemplos de treino.
+2. O **comprimento médio** deve cair — as respostas de referência têm 96 palavras em média, bem menos do que o modelo base produz espontaneamente.
 3. A **similaridade com a referência** deve subir modestamente. Uma subida grande seria indício de memorização, não de generalização, com um dataset deste tamanho.
 4. Os **trigramas distintos** podem cair no fine-tuned: fine-tuning em dataset pequeno aumenta a propensão a repetição.
 
@@ -468,15 +511,25 @@ Distribuição das fontes citadas nas 35 recuperações registradas:
 | `protocolo_mama01_rastreamento` | 4 |
 | `protocolo_onco01_encaminhamento` | 0 |
 
-**Análise.** Um único protocolo concentra 57% das citações, inclusive em casos em que é irrelevante: à pergunta "Devo lavar o olho com água nesse caso?", para um paciente com conjuntivite, o sistema recuperou e citou o protocolo de segurança no uso de contraste iodado em exames de imagem.
+Um único protocolo concentra 57% das citações, inclusive em casos em que é irrelevante: à pergunta "Devo lavar o olho com água nesse caso?", para um paciente com conjuntivite, o sistema citou o protocolo de segurança no uso de contraste iodado.
 
-A causa é a combinação de uma base pequena com um retriever sem limiar. São 5 documentos e 50 chunks, e o retriever usa `top_k=4` **sem `similarity_score_threshold`**: ele sempre devolve 4 chunks, existam ou não chunks pertinentes. Quando nada é relevante, devolve os quatro menos irrelevantes — e o protocolo de contraste, por conter vocabulário de procedimento e cuidado geral, é sistematicamente o vizinho mais próximo de perguntas genéricas.
+**Diagnóstico.** O log revela o mecanismo por trás desse número: **29 das 32 interações com recuperação citaram exatamente uma fonte**, apesar de o retriever estar configurado com `top_k=4`. Um retriever que devolve 4 chunks e produz uma única fonte distinta está devolvendo *o mesmo chunk quatro vezes*.
 
-Há um efeito colateral favorável: como as fontes são citadas, o problema fica **visível**. Uma citação obviamente inadequada sinaliza ao médico que a resposta não está bem ancorada. Um sistema sem explainability teria o mesmo defeito, em silêncio.
+A causa é a semântica de `Chroma.from_documents` sobre um `persist_directory` já existente: ela **acrescenta** os documentos à coleção em vez de substituí-la. Executar `rag/ingest.py` repetidamente multiplica o índice — o índice medido continha 10 chunks por protocolo, cinco vezes os 2 chunks que cada documento efetivamente produz com `chunk_size=500`. Com cinco cópias idênticas de cada trecho, os 4 vizinhos mais próximos de qualquer consulta tendem a ser as próprias cópias do trecho de maior similaridade, e a diversidade da recuperação colapsa para um documento por pergunta.
+
+Isso explica as duas observações de uma vez: a concentração em um único protocolo e a citação de fonte irrelevante — com apenas um documento efetivo por resposta, uma similaridade marginal vence sozinha, sem os outros três trechos para contrabalançar.
+
+**Configuração atual.** `rag/ingest.py` reconstrói o índice do zero a cada execução (`reset_vectorstore`), o que torna a indexação idempotente e elimina a duplicação. A base indexada é de 32 protocolos e 122 chunks, cobrindo as especialidades atendidas pelo hospital.
+
+**Limitação que permanece.** O retriever usa `top_k` fixo, **sem `similarity_score_threshold`**: ele sempre devolve 4 chunks, existam ou não chunks pertinentes. Com a base ampliada e sem duplicação, os quatro tendem a ser relevantes para os quadros cobertos, mas para uma pergunta fora de todo o acervo o retriever ainda devolverá os quatro menos irrelevantes em vez de lista vazia. O system prompt já instrui o modelo a declarar contexto insuficiente; hoje ele nunca exercita essa instrução, porque sempre recebe contexto.
+
+Há um efeito colateral favorável em toda essa análise: como as fontes são citadas, o problema ficou **visível** e mensurável a partir do log. Um sistema sem explainability teria o mesmo defeito, em silêncio.
 
 ### 5.5 Estabilidade da geração e aderência ao formato
 
-A configuração de geração aplica `repetition_penalty=1.15` e `no_repeat_ngram_size=3` em ambos os pipelines, e tetos de tokens separados por tarefa (400 no chat, 800 na visão geral). Isso reduz — mas não elimina — dois comportamentos característicos de modelos pequenos: loops de repetição e truncamento no meio da resposta. Os valores não foram calibrados contra benchmark; se a qualidade das respostas cair, `repetition_penalty` é o primeiro parâmetro a revisar.
+A configuração de geração aplica `repetition_penalty=1.15` e `no_repeat_ngram_size=3` nos dois pipelines, tetos de tokens separados por tarefa (400 no chat, 450 na visão geral) e geração gulosa na visão geral. Isso reduz — sem eliminar — dois comportamentos característicos de modelos pequenos: loops de repetição e truncamento no meio da resposta.
+
+Vale registrar o limite dessas defesas. `no_repeat_ngram_size` proíbe repetir a mesma sequência exata de três tokens, e por isso **não contém a deriva morfológica**: quando o modelo produz `fibrose`, `fibrotic`, `fibrilari`, `fibrinoses`, cada item é uma sequência de tokens diferente, e nenhuma restrição de n-grama é violada. O teto de tokens é a contenção que efetivamente limita o volume dessa deriva, e por isso um teto generoso demais é contraproducente: não dá espaço para uma resposta melhor, dá espaço para o modelo continuar gerando depois de já ter dito o que tinha a dizer.
 
 A aderência ao formato de saída pedido à visão geral (`RELEVANTE:` / `ATENCAO:`, itens iniciados por `-`) não é garantida pelo modelo. O parser (`agent/overview_parser.py`) é defensivo por isso:
 
@@ -486,22 +539,46 @@ A aderência ao formato de saída pedido à visão geral (`RELEVANTE:` / `ATENCA
 
 O princípio de projeto é tratar o formato como saída não confiável e parseá-la defensivamente, em vez de depender da obediência do modelo ao prompt. Cada regra do parser tem teste de regressão correspondente.
 
+A limitação estrutural do parser é que ele trata **forma**, não **conteúdo**: uma lista de 167 itens bem formatados, com marcadores corretos, atravessa todas as suas regras sem objeção. Essa é a fronteira endereçada pela seção seguinte.
+
 ### 5.6 Fidelidade ao contexto
 
-A limitação mais séria do sistema aparece na visão geral. Trecho real do bloco de "pontos de atenção" gerado para o paciente 19, cujo quadro é conjuntivite bacteriana:
+A limitação mais séria do modelo aparece na visão geral, e tem duas manifestações medidas.
 
-> "Hipertensão arterial sistêmica alta (PA 180/100 mmHgg). Não há histórico de diabetes ou colesterol alto. Paciente não está tomando qualquer anticonvulsivo. **Há suspeita de reação adversa a antibióticos. Pacientes com história de câncer devem ter avaliação adicional sobre possíveis complicações. Pacientemente é portador de doença autoimune. Paciência tem histórico de problemas cardíacos familiares.** PacIENTE TEM HIPERTENSÃO ARTERIAL SISTÊMICA ALTA E CONSIDERA APOIAR SEUS DADOS CLÍNICOS COM UMA TECNOLOGIA DE COORDENAÇÃO DOS DADOS DO PACIENTE…"
+**Comorbidade fabricada.** Trecho do bloco de pontos de atenção gerado para um paciente com conjuntivite bacteriana:
 
-Quatro problemas distintos em um único parágrafo:
+> "Hipertensão arterial sistêmica alta (PA 180/100 mmHgg). Não há histórico de diabetes ou colesterol alto. **Há suspeita de reação adversa a antibióticos. Pacientemente é portador de doença autoimune. Paciência tem histórico de problemas cardíacos familiares.** PacIENTE TEM HIPERTENSÃO ARTERIAL SISTÊMICA ALTA E CONSIDERA APOIAR SEUS DADOS CLÍNICOS COM UMA TECNOLOGIA DE COORDENAÇÃO DOS DADOS DO PACIENTE…"
 
-1. **Comorbidades inventadas.** Doença autoimune, histórico familiar cardíaco e suspeita de reação adversa a antibióticos não constam da ficha do paciente.
-2. **Degeneração morfológica.** "Paciente" vira "Pacientemente" e depois "Paciência"; "mmHg" vira "mmHgg"; a frase final degenera em caixa alta e perde sentido.
-3. **Ruído estrutural.** Negações irrelevantes ("não está tomando qualquer anticonvulsivo") ocupam espaço de pontos de atenção reais.
-4. **Fora do alcance do guardrail.** O filtro de prescrição não sinalizou essa resposta, e corretamente: não há linguagem de prescrição nela. O guardrail cobre *prescrição direta*, não *fabricação de fato clínico*. São riscos diferentes, e o sistema endereça apenas um deles.
+Doença autoimune, histórico familiar cardíaco e suspeita de reação adversa a antibióticos não constam da ficha. Há ainda degeneração morfológica — "Paciente" vira "Pacientemente" e depois "Paciência"; "mmHg" vira "mmHgg" — e a frase final perde sentido em caixa alta.
 
-**Análise.** Esse é o limite estrutural de um modelo de 1,5 bilhão de parâmetros ajustado com 47 exemplos, ao qual se pede síntese analítica sobre um bloco de texto longo. O fine-tuning ensina o formato, não a fidelidade ao contexto. Alucinação de comorbidade é a falha de maior gravidade possível neste sistema, e nenhuma camada atual a detecta.
+**Deriva por associação livre.** A manifestação extrema, num paciente com hérnia inguinal não complicada: o bloco de pontos de atenção veio com **167 itens**. A sequência começa em um achado plausível ("Encarceramento" — a complicação real de uma hérnia), passa por comorbidades não registradas na ficha (insuficiência renal crônica, diabetes, edema pulmonar), deriva para famílias inteiras de neoplasias e infecções sem qualquer relação com o caso (`carcinoma epitelial`, `carcinoma laringe`, `meningovascular`, `meningococcemia`) e termina em morfologia inventada: `fibrilari`, `filtracão`, `filtrança`, `filtrapta`, `filtreiras`, `filtramentos`.
 
-Enquanto isso não for endereçado, a visão geral deve ser tratada como rascunho a ser lido criticamente, com aviso de interface proporcional a esse risco.
+O padrão tem três marcas mensuráveis: **volume** muito acima dos 5 itens pedidos, **deriva temática** — nenhum dos 167 itens compartilha um termo de conteúdo com o prontuário — e **famílias morfológicas**, sequências de variações de um mesmo radical.
+
+**Conduta na faixa etária errada.** Uma terceira manifestação, com causa distinta das duas anteriores. À pergunta sobre qual procedimento realizar num paciente de **66 anos** com hérnia inguinal, a resposta descreveu a conduta da hérnia inguinal **pediátrica**.
+
+Aqui o modelo não fabricou: ele preencheu uma lacuna. Idade e sexo não constavam do contexto enviado ao prompt — `montar_contexto_clinico` compunha o bloco a partir do histórico resumido e dos campos da anamnese, e nenhum dos dois carrega esses dados, que vivem na tabela `pacientes`. Sem a idade, o modelo assumiu a faixa etária mais frequente na literatura do diagnóstico, e a hérnia inguinal pediátrica é largamente predominante nessa literatura. O resultado é o tipo de erro mais difícil de perceber numa leitura rápida: internamente coerente, clinicamente bem escrito, e errado para o paciente à frente.
+
+A correção é na origem — o contexto passou a abrir com idade e sexo (3.3) — com a checagem de coerência etária (3.6) como segunda camada, porque a consequência de não perceber esse erro é alta demais para depender de uma única defesa. Aplicada à resposta observada, com a idade real do paciente:
+
+| Entrada | Resultado |
+|---|---|
+| Resposta citando `criancas`, paciente de 66 anos | `requer_validacao_humana=true`, termo `criancas` reportado, ressalva anexada |
+| Mesma resposta, paciente de 4 anos | não sinalizada — a faixa citada contém a idade |
+| `"diferente do que ocorre em crianças, no idoso…"`, paciente de 66 anos | não sinalizada — há faixa compatível na resposta |
+
+**Por que as camadas anteriores não contêm a deriva.** O guardrail de prescrição não sinaliza esse texto, e corretamente: não há linguagem de prescrição nele. O guardrail cobre *prescrição direta*, não *fabricação de fato clínico* — são riscos diferentes. `no_repeat_ngram_size` não se aplica, porque cada item é uma sequência de tokens distinta. `merge_similar_bullets` também não, porque exige prefixo e sufixo comuns em nível de palavra, e itens de uma ou duas palavras não formam template. E o parser não objeta: a lista está bem formatada.
+
+**A camada que endereça isso.** O filtro de ancoragem (`agent/overview_filter.py`, descrito em 3.6) exige que cada item compartilhe um termo de conteúdo com o prontuário do paciente, e descarta o bloco inteiro quando classifica a geração como degenerada. Aplicado à saída de 167 itens acima, com o contexto clínico real do paciente:
+
+| Bloco | Itens gerados | Ancorados no prontuário | Resultado |
+|---|---:|---:|---|
+| `RELEVANTE` | 2 | 2 | ambos exibidos |
+| `ATENCAO` | 167 | 0 | bloco descartado, `geracao_degenerada=true` |
+
+O médico vê os dois pontos relevantes legítimos e nenhum ponto de atenção, em vez de uma lista de 167 termos entre os quais não teria como distinguir o achado real do inventado. A API devolve `pontos_descartados` e `geracao_degenerada` para que a interface possa diferenciar "nada a sinalizar" de "resposta descartada".
+
+**O que permanece.** As três manifestações têm em comum a origem — um modelo pequeno ao qual se pede síntese e raciocínio clínico — mas exigiram defesas distintas: dado ausente do prompt se resolve completando o prompt; conteúdo fabricado se resolve exigindo ancoragem; conduta na faixa errada se resolve confrontando a resposta com o dado estruturado. Nenhuma delas ataca a geração. O filtro impede a exibição da alucinação; não impede sua produção. A causa é estrutural — um modelo de 1,5 bilhão de parâmetros ajustado com poucas dezenas de exemplos, ao qual se pede síntese analítica sobre um bloco de texto longo. O fine-tuning ensina o formato, não a fidelidade ao contexto. Um item de atenção clinicamente correto mas expresso com vocabulário ausente da ficha também é descartado, o que é uma perda real e assumida: a alternativa é exibir uma lista cuja confiabilidade o leitor não pode avaliar.
 
 ### 5.7 Comportamento agregado do sistema
 
@@ -511,57 +588,80 @@ Das 68 interações registradas, sobre 7 pacientes distintos:
 |---|---:|---|
 | Interações totais | 68 | 31 visões gerais, 24 chats, 13 anteriores ao registro de tipo |
 | Sinalizadas pelo guardrail de prescrição | 0 | Nenhum falso positivo — e nenhum verdadeiro positivo |
+| Coerência etária | Camada nova | Sem histórico de operação; validada por teste sobre o caso real |
 | Encaminhadas para validação humana | 0 | Consequência direta da linha acima |
 | Com alerta de exame pendente | 34 (50%) | O nó de exames está exercitado e funcionando |
 | Erros de execução do grafo | 0 | Todas chegaram a `status="concluido"` |
 
 **Sobre o guardrail de prescrição nunca ter disparado:** isso não é evidência de que funciona. É evidência de que o modelo fine-tuned não produziu linguagem de prescrição direta nas perguntas submetidas — comportamento desejado, mas que também significa que o filtro **não foi exercitado em operação**. Sua cobertura real é conhecida apenas pelos testes unitários, e o caminho de validação humana no grafo permanece não exercitado com dado real.
 
-**Cobertura de testes:** 38 testes automatizados, todos passando, sobre lógica pura, sem carregar LLM nem modelo de embeddings — guardrail de escopo (7), consolidação de itens (7), parsing da visão geral (11) e métricas de avaliação (12).
+**Cobertura de testes:** 68 testes automatizados, todos passando, sobre lógica pura, sem carregar LLM nem modelo de embeddings — guardrail de escopo (7), consolidação de itens (7), parsing da visão geral (11), filtro de ancoragem (15), coerência etária (15) e métricas de avaliação (12). Cada caso real observado em operação — a saída degenerada de 167 itens, a resposta pediátrica para paciente idoso — entra como teste de regressão.
 
 ### 5.8 Síntese e limitações
 
 | Aspecto | Estado | Evidência |
 |---|---|---|
 | Pipeline ponta a ponta | ✅ Funcional | 68 interações, 0 erros de execução |
-| Fine-tuning | ✅ Concluído | Adapter de 17,4 MB, 3 épocas, 18 passos de otimização |
+| Fine-tuning | ✅ Pipeline completo e reprodutível | Dataset de 98 exemplos, QLoRA em 33 passos, adapter de 17,4 MB |
 | Explainability | ✅ Implementada | Fontes citadas em toda resposta de chat; similaridades numéricas no log |
 | Prontuário multiespecialidade | ✅ Implementado | 32 pacientes, 30 quadros clínicos distintos |
+| Cobertura da base de conhecimento | ✅ Alinhada ao escopo | 32 protocolos e 43 FAQs internas cobrindo as áreas do prontuário |
+| Indexação do RAG | ✅ Idempotente | `reset_vectorstore` elimina a duplicação de chunks |
 | Guardrail de escopo | ⚠️ Funciona, sem folga | Margens de +0,005 (falso positivo) vs. +0,006 (caso legítimo) |
-| Qualidade de recuperação | ⚠️ Enviesada | 57% das citações em um único protocolo |
+| Retriever sem limiar de relevância | ⚠️ `top_k` fixo | Nunca devolve contexto vazio |
 | Estabilidade da geração | ⚠️ Contida por parsing defensivo | Repetição e desvio de formato tratados no backend |
 | Guardrail de prescrição | ⚠️ Não exercitado | 0 acionamentos em 68 interações |
-| Cobertura da base de conhecimento | ❌ Restrita a oncologia mamária | 4 dos 5 protocolos e 51 das 51 FAQs |
-| Fidelidade ao contexto | ❌ Falha grave não endereçada | Comorbidades inventadas na visão geral |
+| Exibição de conteúdo fabricado | ✅ Bloqueada | Filtro de ancoragem descarta o bloco degenerado (167 → 0 itens) |
+| Dado demográfico no prompt | ✅ Corrigido | Idade e sexo abrem o contexto clínico |
+| Conduta em faixa etária errada | ⚠️ Sinalizada, não bloqueada | Checagem de coerência etária marca para validação humana |
+| Geração de conteúdo fabricado | ❌ Limitação do modelo | Alucinação ocorre; é contida na exibição, não na origem |
 | Comparação base vs. fine-tuned | ⏳ Script pronto, execução pendente | `finetuning/evaluate.py` |
 
 **Limitações:**
 
-1. **Cobertura da base de conhecimento.** O prontuário é multiespecialidade, mas a base do RAG e o corpus de fine-tuning são de oncologia mamária. Para um paciente com pneumonia ou apendicite, não há protocolo pertinente a recuperar — o que agrava diretamente o viés de recuperação descrito em 5.4.
-2. **Fidelidade ao contexto na visão geral** (5.6) — a mais grave.
-3. **Dataset pequeno e desalinhado com uma das tarefas.** 55 exemplos, todos de QA factual e geração de documento; nenhum de síntese de prontuário, que é a tarefa da visão geral.
-4. **Tradução automática sem revisão clínica** das 51 FAQs.
-5. **Retriever sem limiar de relevância** (`top_k` fixo).
-6. **Guardrail de escopo sem folga de decisão** (5.3).
-7. **Guardrail de prescrição não exercitado em operação** (5.7).
-8. **Avaliação sem julgamento clínico.** Nenhuma métrica deste trabalho mede correção médica.
-9. **Sem persistência de estado entre interações.** Não há memória de conversa.
-10. **Modelo servido em processo.** `HuggingFacePipeline` dentro do FastAPI: adequado ao escopo acadêmico, não a produção (sem batching, sem escala horizontal).
+1. **Fidelidade ao contexto na visão geral** (5.6) — a mais grave. O filtro de ancoragem impede que conteúdo fabricado seja exibido, mas não impede que seja gerado, e descarta junto a inferência clínica legítima que use vocabulário ausente da ficha.
+2. **Dataset desalinhado com uma das tarefas.** Os 98 exemplos são de resposta a pergunta clínica e de geração de documento; nenhum é de síntese de prontuário, que é a tarefa da visão geral.
+3. **Volume do dataset.** 98 exemplos são suficientes para ajustar formato e tom, não para incorporar conhecimento clínico novo — o que é coerente com a divisão de papéis da arquitetura, mas limita o que se pode esperar do fine-tuning isoladamente.
+4. **Tradução automática sem revisão clínica** das 51 FAQs derivadas de bases públicas.
+5. **Protocolos sintéticos.** Os 32 protocolos são material acadêmico escrito para o projeto, não diretrizes institucionais validadas.
+6. **Coerência etária apenas lexical.** A checagem cobre termos explícitos de faixa etária. Uma conduta inadequada à idade expressa sem nenhum desses termos passa sem sinalização.
+7. **Retriever sem limiar de relevância** (5.4).
+8. **Guardrail de escopo sem folga de decisão** (5.3).
+9. **Guardrail de prescrição não exercitado em operação** (5.7).
+10. **Avaliação sem julgamento clínico.** Nenhuma métrica deste trabalho mede correção médica.
+11. **Sem persistência de estado entre interações.** Não há memória de conversa.
+12. **Modelo servido em processo.** `HuggingFacePipeline` dentro do FastAPI: adequado ao escopo acadêmico, não a produção.
 
 **Ações indicadas, por prioridade:**
 
 | # | Ação | Justificativa |
 |---|---|---|
-| 1 | Ampliar a base de protocolos para as demais especialidades presentes no prontuário | Alinha a cobertura do conhecimento ao escopo hospitalar do sistema |
-| 2 | Verificação de ancoragem dos pontos gerados contra o contexto do paciente | Ataca a falha de fidelidade (5.6) com custo baixo e de forma determinística |
-| 3 | `similarity_score_threshold` no retriever + tratamento explícito de contexto vazio | Ataca o viés de recuperação (5.4) |
-| 4 | Executar `evaluate.py` e fechar a tabela de 5.2 | Completa a comparação quantitativa |
-| 5 | Ampliar o dataset com exemplos de síntese de prontuário e de outras especialidades | Alinha o treino às tarefas e ao escopo reais |
-| 6 | Recalibrar `SCOPE_MARGIN` com volume de perguntas clínicas reais | Requer dado de operação ainda não disponível |
-| 7 | Testar Qwen2.5-3B ou 7B | Reduz alucinação e degeneração morfológica |
-| 8 | Servir o modelo fora do processo (merge + GGUF + Ollama, ou vLLM) | Desacopla API e inferência |
+| 1 | `similarity_score_threshold` no retriever + tratamento explícito de contexto vazio | Remove a última causa estrutural de citação irrelevante (5.4) |
+| 2 | Ampliar o dataset com exemplos de síntese de prontuário | A tarefa da visão geral não tem representação no treino, o que é a raiz da deriva descrita em 5.6 |
+| 3 | Calibrar o filtro de ancoragem com dado de operação | Medir quantos itens legítimos estão sendo descartados junto com os fabricados |
+| 4 | Recalibrar `SCOPE_MARGIN` com volume de perguntas clínicas reais | Requer dado de operação ainda não disponível |
+| 5 | Testar Qwen2.5-3B ou 7B | Ataca a alucinação na origem, e não apenas na exibição |
+| 6 | Servir o modelo fora do processo (merge + GGUF + Ollama, ou vLLM) | Desacopla API e inferência |
 
----
+### 5.9 Estado de medição
+
+O dataset e a base de protocolos foram ampliados para cobrir todas as especialidades do hospital. Isso torna necessária a regeneração dos dois artefatos derivados antes que as métricas sejam refeitas:
+
+```bash
+python rag/ingest.py                          # reindexa os 32 protocolos → 122 chunks
+python finetuning/train_qlora.py              # ou o notebook Colab: re-treina com os 84 exemplos
+python finetuning/evaluate.py                 # preenche a tabela de 5.2
+```
+
+| Medição | Situação |
+|---|---|
+| Comparação base vs. fine-tuned (5.2) | Pendente da execução de `evaluate.py` sobre o adapter re-treinado |
+| Guardrail de escopo (5.3) | Válida — `agent/scope_guard.py`, âncoras e modelo de embeddings inalterados |
+| Distribuição de fontes (5.4) | A refazer após a reindexação; a análise de causa permanece válida |
+| Estabilidade e parsing (5.5) | A refazer — teto de tokens e decodificação da visão geral alterados |
+| Fidelidade ao contexto (5.6) | Comportamento do filtro verificado sobre a saída real; a taxa de descarte de itens legítimos ainda não foi medida |
+| Comportamento agregado (5.7) | A refazer com o novo acervo em operação |
+| Coerência etária (5.6) | Sem dado de operação — medir a taxa de acionamento e de falso positivo |
 
 ## 6. Referências e licenças
 

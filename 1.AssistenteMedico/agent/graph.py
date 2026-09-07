@@ -66,10 +66,15 @@ class AgentState(TypedDict, total=False):
     resposta_bruta: str
     fontes: list[str]
     resposta_final: str
+    demografia: dict | None  # sexo, data de nascimento e idade — ver receber_paciente
+    contexto_clinico: str | None  # ficha do paciente usada na visao geral (ancoragem)
     pontos_relevantes: list[str]  # so preenchido quando tipo_interacao == "visao_geral"
     pontos_atencao: list[str]  # idem
+    pontos_descartados: int  # itens removidos pelo filtro de ancoragem (auditoria)
+    geracao_degenerada: bool  # secao inteira descartada — ver agent/overview_filter.py
     requer_validacao_humana: bool
     padroes_sinalizados: list[str]
+    termos_etarios_incoerentes: list[str]  # ver agent/demographic_guard.py
     status: str
 
 

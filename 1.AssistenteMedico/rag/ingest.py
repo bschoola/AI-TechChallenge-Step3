@@ -4,6 +4,7 @@ Uso:
     python rag/ingest.py
 """
 
+import shutil
 import sys
 from pathlib import Path
 
@@ -62,6 +63,29 @@ def split_documents(documents: list[Document]) -> list[Document]:
     return splitter.split_documents(documents)
 
 
+def reset_vectorstore() -> bool:
+    """Apaga o indice persistido antes de reconstrui-lo.
+
+    `Chroma.from_documents` com um `persist_directory` que ja existe ACRESCENTA os
+    documentos a colecao existente em vez de substitui-la. Sem este reset, cada
+    execucao de `python rag/ingest.py` duplicava todos os chunks no indice.
+
+    O efeito era silencioso e corrompia a recuperacao: com N copias identicas de
+    cada chunk, o retriever (`search_kwargs={"k": RETRIEVER_TOP_K}`) devolvia as N
+    copias do MESMO trecho em vez de N trechos distintos, de modo que a resposta
+    citava um unico protocolo por pergunta, independentemente da relevancia dos
+    demais. A indexacao passa a ser sempre uma reconstrucao completa a partir de
+    data/raw/protocolos — a operacao e idempotente e barata (a base de protocolos
+    e pequena), entao nao vale a complexidade de uma indexacao incremental.
+
+    Retorna True se havia um indice anterior que foi removido.
+    """
+    if CHROMA_PERSIST_DIR.exists():
+        shutil.rmtree(CHROMA_PERSIST_DIR)
+        return True
+    return False
+
+
 def build_vectorstore(chunks: list[Document]) -> Chroma:
     """Gera embeddings (E5Embeddings, ver rag/embeddings.py) e persiste em Chroma."""
     CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
@@ -75,6 +99,8 @@ def build_vectorstore(chunks: list[Document]) -> Chroma:
 def main() -> None:
     docs = load_documents()
     chunks = split_documents(docs)
+    if reset_vectorstore():
+        print("Indice anterior removido — reconstruindo do zero (ver reset_vectorstore).")
     build_vectorstore(chunks)
     print(f"Indexados {len(chunks)} chunks (a partir de {len(docs)} documentos) em {CHROMA_PERSIST_DIR}")
 

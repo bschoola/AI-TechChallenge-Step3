@@ -59,8 +59,8 @@ python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-python finetuning/prepare_dataset.py         # 1. prepara o dataset de fine-tuning
-python rag/ingest.py                         # 2. indexa os protocolos no RAG
+python finetuning/prepare_dataset.py         # 1. prepara o dataset de fine-tuning (98 exemplos)
+python rag/ingest.py                         # 2. indexa os 32 protocolos no RAG
 python finetuning/train_qlora.py             # 3. fine-tuning (ou o notebook Colab — ver README do módulo)
 uvicorn api.main:app --reload --port 8001    # 4. sobe a API
 ```
@@ -85,10 +85,16 @@ python finetuning/evaluate.py    # compara modelo base vs. fine-tuned e salva as
 python -m pytest tests/ -q       # 38 testes de lógica pura (sem carregar LLM)
 ```
 
-## Cobertura atual da base de conhecimento
+## Cobertura
 
-O sistema é hospitalar geral: arquitetura, prontuário, guardrails e API são agnósticos de especialidade. A **base de conhecimento**, porém, ainda está concentrada em oncologia mamária — 4 dos 5 protocolos indexados no RAG e as 51 FAQs de fine-tuning. Ampliar os protocolos para as demais especialidades presentes no prontuário é a primeira ação indicada no relatório técnico (seção 5.8).
+O escopo é hospitalar geral e as três camadas de dados acompanham esse escopo:
+
+| Camada | Cobertura |
+|---|---|
+| Prontuário simulado | 32 pacientes · 30 quadros clínicos distintos |
+| Protocolos indexados no RAG | 32 protocolos · 122 chunks · clínica médica, urgência, pneumologia, infectologia, gastro, neuro, otorrino, oftalmo, dermato, cirurgia, oncologia e segurança do paciente |
+| Dataset de fine-tuning | 98 exemplos — 43 FAQs internas multiespecialidade + 51 de base pública (oncologia mamária) + 5 modelos de documento |
 
 ## Aviso
 
-Este sistema é um projeto acadêmico de pós-graduação. O assistente é uma ferramenta de **apoio** à decisão clínica — nenhuma resposta deve ser usada como prescrição direta sem validação de um profissional de saúde habilitado. As FAQs usadas no fine-tuning vêm de bases públicas (MedQuAD, PubMedQA) traduzidas automaticamente, sem revisão clínica humana.
+Este sistema é um projeto acadêmico de pós-graduação. O assistente é uma ferramenta de **apoio** à decisão clínica — nenhuma resposta deve ser usada como prescrição direta sem validação de um profissional de saúde habilitado. Os protocolos são sintéticos, escritos para o projeto, e parte das FAQs vem de bases públicas (MedQuAD, PubMedQA) traduzidas automaticamente, sem revisão clínica humana.

@@ -2,51 +2,79 @@
 
 ```
 raw/
-├── protocolos/                          # protocolos clínicos sintéticos (RAG / Chroma) -- inalterado
-├── faqs/                                # pares instrução->resposta para o fine-tuning (ver origem abaixo)
-├── laudos_modelo/                       # modelos de laudo/receita sintéticos (formato/tom) -- inalterado
+├── protocolos/                          # 32 protocolos clínicos sintéticos → RAG (Chroma)
+├── faqs/                                # 94 pares instrução→resposta → fine-tuning
+├── laudos_modelo/                       # 5 modelos de laudo/parecer sintéticos → fine-tuning
 └── _arquivado_sintetico_hospital_vida_nova/
-    └── faqs/                            # FAQs sintéticas originais do Hospital Vida Nova, arquivadas
+    └── faqs/                            # FAQs sintéticas de uma versão anterior, preservadas
 ```
 
-## Origem de `faqs/` (atualizado em 05/09/2026)
+## Escopo
 
-Por decisão do usuário, o conjunto de FAQs sintéticas do "Hospital Vida Nova" foi
-**substituído** por um conjunto de 50 pares instrução->resposta traduzidos e
-resumidos a partir de duas bases públicas sugeridas pela FIAP:
+O assistente atende **todas as especialidades** do hospital fictício. As três
+pastas acima cobrem, juntas, os quadros clínicos presentes no prontuário
+simulado (`data/processed/prontuarios_mock.db`, 32 pacientes / 30 quadros
+distintos).
 
-- **MedQuAD** (NIH, licença CC BY 4.0) -- https://github.com/abachaa/MedQuAD
-  Ben Abacha, A. & Demner-Fushman, D. "A Question-Entailment Approach to Question
-  Answering." BMC Bioinformatics, 2019.
-- **PubMedQA** (licença MIT) -- https://github.com/pubmedqa/pubmedqa
-  Jin, Q. et al. "PubMedQA: A Dataset for Biomedical Research Question Answering." 2019.
+## `protocolos/` — base de conhecimento do RAG (32 arquivos)
 
-Filtragem: apenas documentos/perguntas com foco em **câncer de mama** (oncologia
-mamária), para manter coerência com o domínio do resto do projeto (RAG,
-system prompt, prontuário mock). Fonte por arquivo: prefixo do nome
-(`cancergov_`, `seniorhealth_`, `gard_`, `ghr_`, `mplustopics_`, `pubmedqa_`).
-Detalhe completo em `faqs/_FONTE.md`.
+Protocolos internos sintéticos do "Hospital Vida Nova", indexados por
+`rag/ingest.py` no Chroma. **Não entram no fine-tuning**: são conhecimento a
+consultar e citar, e treinar o modelo neles destruiria a rastreabilidade que o
+requisito de explainability exige.
 
-**Tradução e resumo**: feitos com apoio de LLM (Claude), **sem etapa de revisão
-manual humana adicional** -- decisão explícita do usuário, por questão de tempo.
-Isso deve constar no relatório técnico como limitação conhecida: conteúdo
-clínico traduzido automaticamente tem risco residual de imprecisão
-terminológica e deve ser tratado como material de estudo, não como fonte
-validada para uso clínico real.
+| Código | Área |
+|---|---|
+| `MAMA-01`, `MAMA-02`, `ONCO-01`, `ONCO-03` | Oncologia mamária |
+| `CLI-01` … `CLI-05` | Clínica médica: hipertensão, diabetes, anemia, tireoide, dor crônica |
+| `URG-01` … `URG-04` | Urgência: dor abdominal, cólica renal, trauma de extremidade, TVP |
+| `PNE-01` … `PNE-03` | Pneumologia: pneumonia, asma, tosse aguda |
+| `INF-01` … `INF-03` | Infectologia: síndromes febris, ITU, uso racional de antimicrobianos |
+| `GAS-01`, `GAS-02` | Gastroenterologia: gastroenterite, DRGE |
+| `NEU-01`, `NEU-02` | Neurologia: cefaleia, lombalgia |
+| `OTO-01`, `OFT-01`, `DER-01` | Otorrino, oftalmologia, dermatologia |
+| `CIR-01` | Cirurgia geral: hérnia inguinal |
+| `SEG-01` … `SEG-04` | Segurança: alergias e interações, sinais vitais, exames pendentes, contraste |
+| `ADM-01` | Consulta de rotina e rastreamento |
 
-**Desvio consciente do requisito do desafio**: o PDF da FIAP pede fine-tuning
-com "dados médicos internos" do hospital fictício. As FAQs agora vêm de bases
-públicas reais, não de dado sintético interno -- isso deve ser documentado
-explicitamente no relatório como uma decisão deliberada (estudo dirigido às
-bases sugeridas pela própria FIAP), e não como uma omissão. Os `protocolos/`
-(RAG) e os `laudos_modelo/` (formato de laudo/receita) permanecem sintéticos e
-"internos ao hospital fictício", pois não há equivalente de laudo/receita nas
-bases públicas usadas.
+Nenhum protocolo contém posologia específica. A conduta é sempre descrita como
+orientação a ser validada pelo médico responsável, coerente com o guardrail de
+prescrição (`agent/guardrails.py`).
 
-## Licenciamento
+> **Reindexação.** `rag/ingest.py` reconstrói o índice do zero a cada execução
+> (`reset_vectorstore`). Isso é intencional: `Chroma.from_documents` sobre um
+> `persist_directory` existente **acrescenta** documentos em vez de substituí-los,
+> e executar a ingestão repetidamente duplicava todos os chunks — o que corrompia
+> silenciosamente a recuperação, fazendo o retriever devolver N cópias do mesmo
+> trecho em vez de N trechos distintos.
 
-MedQuAD é CC BY 4.0 (exige atribuição, já incluída acima e em `_FONTE.md`).
-PubMedQA é MIT. Ambas permitem uso e redistribuição do conteúdo aqui reproduzido,
-incluindo em contexto acadêmico.
+## `faqs/` — dataset de fine-tuning (94 arquivos)
 
-Ver `PLANO_Fase3.md` (raiz do repo), seção 3, para o histórico da decisão.
+Duas origens, identificáveis pelo prefixo do nome. Detalhe e atribuição de
+licença em [`faqs/_FONTE.md`](faqs/_FONTE.md).
+
+| Prefixo | Origem | Arquivos | Cobertura |
+|---|---|---:|---|
+| `hvn_` | Sintético, interno ao hospital fictício | 43 | Todas as especialidades |
+| `cancergov_`, `pubmedqa_`, `seniorhealth_`, `gard_`, `ghr_`, `mplustopics_` | MedQuAD (NIH, CC BY 4.0) e PubMedQA (MIT) | 51 | Oncologia mamária |
+
+**Limitação conhecida das 51 FAQs de base pública**: a tradução e o resumo para
+PT-BR foram feitos com apoio de LLM, sem revisão por profissional de saúde. Há
+risco residual de imprecisão terminológica. O conteúdo é material de estudo, não
+fonte validada para uso clínico real. Isso consta do relatório técnico.
+
+## `laudos_modelo/` — formato de documentos (5 arquivos)
+
+Modelos de laudo, parecer, encaminhamento e orientação pós-procedimento. Entram
+no fine-tuning para ensinar **estrutura e tom** de documento institucional, não
+conteúdo clínico.
+
+## Regenerando o dataset e o índice
+
+```bash
+python finetuning/prepare_dataset.py   # faqs/ + laudos_modelo/ → dataset_train/val.jsonl
+python rag/ingest.py                   # protocolos/ → data/processed/chroma/
+```
+
+Qualquer alteração em `faqs/` ou `laudos_modelo/` exige **re-treinar o modelo**
+para ter efeito; alteração em `protocolos/` exige apenas reindexar.

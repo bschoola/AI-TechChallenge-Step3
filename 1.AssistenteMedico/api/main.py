@@ -58,6 +58,9 @@ class AskResponse(BaseModel):
     alerta: str | None = None
     requer_validacao_humana: bool
     status: str
+    # Termos de faixa etaria na resposta que nao correspondem a idade do paciente
+    # (agent/demographic_guard.py). Lista vazia = resposta coerente com a idade.
+    termos_etarios_incoerentes: list[str] = []
 
 
 class PacienteResponse(BaseModel):
@@ -124,6 +127,13 @@ class VisaoGeralResponse(BaseModel):
     alerta: str | None = None
     requer_validacao_humana: bool
     status: str
+    # Transparencia sobre o filtro de ancoragem (agent/overview_filter.py): quantos
+    # itens gerados foram descartados por nao serem rastreaveis ao prontuario, e se
+    # a geracao foi classificada como degenerada — caso em que as listas voltam
+    # vazias de proposito, e nao por ausencia de achados. O front pode usar isso
+    # para diferenciar "nada a sinalizar" de "resposta descartada".
+    pontos_descartados: int = 0
+    geracao_degenerada: bool = False
 
 
 @app.get("/")
@@ -233,6 +243,8 @@ def get_patient_overview(paciente_id: int) -> VisaoGeralResponse:
         alerta=result.get("alerta"),
         requer_validacao_humana=result["requer_validacao_humana"],
         status=result["status"],
+        pontos_descartados=result.get("pontos_descartados") or 0,
+        geracao_degenerada=bool(result.get("geracao_degenerada")),
     )
 
 
@@ -287,4 +299,5 @@ def ask(payload: AskRequest) -> AskResponse:
         alerta=result.get("alerta"),
         requer_validacao_humana=result["requer_validacao_humana"],
         status=result["status"],
+        termos_etarios_incoerentes=result.get("termos_etarios_incoerentes", []),
     )
