@@ -1,6 +1,6 @@
 # Tech Challenge — OncoTech: Assistente Médico Virtual
 
-Projeto acadêmico da pós-graduação em IA (FIAP). Este repositório contém a entrega da **Fase 3** do Tech Challenge: um assistente médico virtual de apoio à decisão clínica que combina **fine-tuning de LLM (QLoRA)**, **RAG com LangChain**, um **fluxo de decisão em LangGraph**, guardrails de segurança e log de auditoria — servido por uma API FastAPI e consumido por um painel médico em Angular ("Hospital VEinstein").
+Projeto acadêmico da pós-graduação em IA (FIAP). Este repositório contém a entrega da **Fase 3** do Tech Challenge: um assistente médico virtual de apoio à decisão clínica que atende **todas as especialidades** de um hospital fictício, combinando **fine-tuning de LLM (QLoRA)**, **RAG com LangChain**, um **fluxo de decisão em LangGraph**, guardrails de segurança e log de auditoria — servido por uma API FastAPI e consumido por um painel médico em Angular ("Hospital VEinstein").
 
 > As fases anteriores do projeto OncoTech (algoritmo genético para o classificador, API de predição com laudo gerado por LLM) já foram entregues e avaliadas; seus artefatos foram removidos deste repositório para manter o foco na entrega atual.
 
@@ -32,7 +32,7 @@ AI-TechChallenge-Step3/
 
 ## O que o sistema faz
 
-- **Lista e consulta pacientes** de um prontuário mock (SQLite) com 32 pacientes fictícios, cada um com anamnese completa e exames coerentes com o quadro clínico.
+- **Lista e consulta pacientes** de um prontuário mock (SQLite) com 32 pacientes fictícios cobrindo **30 quadros clínicos distintos** — clínica médica, urgência, ortopedia, pneumologia, cardiologia, endocrinologia, gastroenterologia, urologia, neurologia, otorrino, oftalmologia, dermatologia, infectologia, cirurgia geral, ginecologia e oncologia — cada um com anamnese completa e exames coerentes com o quadro.
 - **Visão geral automática por IA** ao abrir a ficha do paciente: sintetiza anamnese e exames em *pontos relevantes* e *pontos de atenção*, em vez de repetir a ficha que já está na tela.
 - **Chat com o assistente** sobre o paciente em consulta, com resposta ancorada nos protocolos internos recuperados via RAG e com as fontes citadas.
 - **Alerta de exames pendentes** disparado por um nó do grafo antes da geração da resposta.
@@ -84,6 +84,10 @@ cd 1.AssistenteMedico
 python finetuning/evaluate.py    # compara modelo base vs. fine-tuned e salva as métricas
 python -m pytest tests/ -q       # 38 testes de lógica pura (sem carregar LLM)
 ```
+
+## Cobertura atual da base de conhecimento
+
+O sistema é hospitalar geral: arquitetura, prontuário, guardrails e API são agnósticos de especialidade. A **base de conhecimento**, porém, ainda está concentrada em oncologia mamária — 4 dos 5 protocolos indexados no RAG e as 51 FAQs de fine-tuning. Ampliar os protocolos para as demais especialidades presentes no prontuário é a primeira ação indicada no relatório técnico (seção 5.8).
 
 ## Aviso
 

@@ -1,6 +1,6 @@
 # 1. Assistente Médico Virtual (Tech Challenge Fase 3)
 
-Projeto **OncoTech** — Tech Challenge Fase 3 da pós-graduação em IA (FIAP). Um **assistente conversacional de apoio à decisão clínica** que combina três técnicas com papéis distintos:
+Projeto **OncoTech** — Tech Challenge Fase 3 da pós-graduação em IA (FIAP). Um **assistente conversacional de apoio à decisão clínica** que atende **todas as especialidades** do hospital fictício, combinando três técnicas com papéis distintos:
 
 - **Fine-tuning (QLoRA)** — ensina *estilo, tom clínico e formato* de resposta.
 - **RAG (LangChain + Chroma)** — injeta *conhecimento factual citável* (protocolos internos), que vira a "fonte" exibida na resposta.
@@ -112,9 +112,11 @@ curl -X POST http://localhost:8001/assistant/ask \
 | `data/raw/faqs/` | 51 pares instrução→resposta sobre oncologia mamária | **Fine-tuning** | MedQuAD (NIH, CC BY 4.0) e PubMedQA (MIT), filtrados para câncer de mama e traduzidos com apoio de LLM |
 | `data/raw/laudos_modelo/` | 5 modelos de laudo/parecer/encaminhamento | **Fine-tuning** (formato e tom) | Sintético |
 | `data/raw/protocolos/` | 5 protocolos clínicos do hospital fictício | **RAG** (conhecimento citável) | Sintético |
-| `data/processed/prontuarios_mock.db` | 32 pacientes, 38 exames, 32 anamneses completas | **Tools** (dado em tempo real) | Sintético, SQLite |
+| `data/processed/prontuarios_mock.db` | 32 pacientes cobrindo 30 quadros clínicos distintos (clínica médica, urgência, pneumologia, infectologia, neurologia, cirurgia, ginecologia, oncologia e outras), 38 exames, 32 anamneses completas | **Tools** (dado em tempo real) | Sintético, SQLite |
 
 O dataset final de fine-tuning tem **55 exemplos** (47 treino / 8 validação). Atribuição de licença e a ressalva sobre tradução automática sem revisão manual estão em [`data/raw/README.md`](data/raw/README.md) e [`data/raw/faqs/_FONTE.md`](data/raw/faqs/_FONTE.md).
+
+> **Cobertura da base de conhecimento.** O prontuário é multiespecialidade, mas os 5 protocolos do RAG e as 51 FAQs de fine-tuning são de oncologia mamária. Para quadros de outras especialidades não há protocolo pertinente a recuperar — ver `RELATORIO_TECNICO.md`, seções 5.4 e 5.8.
 
 > O seed do prontuário mock (`agent/tools.py::init_mock_db`) é 100% idempotente (`INSERT OR IGNORE` por id): reiniciar a API preenche o que faltar sem duplicar nem sobrescrever, e migra bancos antigos automaticamente. Não é preciso apagar o `.db` ao atualizar o projeto.
 
