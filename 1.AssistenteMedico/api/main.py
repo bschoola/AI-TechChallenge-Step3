@@ -61,6 +61,9 @@ class AskResponse(BaseModel):
     # Termos de faixa etaria na resposta que nao correspondem a idade do paciente
     # (agent/demographic_guard.py). Lista vazia = resposta coerente com a idade.
     termos_etarios_incoerentes: list[str] = []
+    # Protocolos citados na resposta que nao estavam entre as fontes consultadas
+    # (agent/citation_guard.py). Lista vazia = todas as citacoes conferem.
+    citacoes_invalidas: list[str] = []
 
 
 class PacienteResponse(BaseModel):
@@ -300,4 +303,5 @@ def ask(payload: AskRequest) -> AskResponse:
         requer_validacao_humana=result["requer_validacao_humana"],
         status=result["status"],
         termos_etarios_incoerentes=result.get("termos_etarios_incoerentes", []),
+        citacoes_invalidas=result.get("citacoes_invalidas", []),
     )

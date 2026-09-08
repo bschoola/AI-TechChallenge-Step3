@@ -3,7 +3,7 @@
 ```
 raw/
 ├── protocolos/                          # 32 protocolos clínicos sintéticos → RAG (Chroma)
-├── faqs/                                # 94 pares instrução→resposta → fine-tuning
+├── faqs/                                # 93 pares instrução→resposta → fine-tuning
 ├── laudos_modelo/                       # 5 modelos de laudo/parecer sintéticos → fine-tuning
 └── _arquivado_sintetico_hospital_vida_nova/
     └── faqs/                            # FAQs sintéticas de uma versão anterior, preservadas
@@ -48,7 +48,7 @@ prescrição (`agent/guardrails.py`).
 > silenciosamente a recuperação, fazendo o retriever devolver N cópias do mesmo
 > trecho em vez de N trechos distintos.
 
-## `faqs/` — dataset de fine-tuning (94 arquivos)
+## `faqs/` — dataset de fine-tuning (93 arquivos)
 
 Duas origens, identificáveis pelo prefixo do nome. Detalhe e atribuição de
 licença em [`faqs/_FONTE.md`](faqs/_FONTE.md).
@@ -56,9 +56,9 @@ licença em [`faqs/_FONTE.md`](faqs/_FONTE.md).
 | Prefixo | Origem | Arquivos | Cobertura |
 |---|---|---:|---|
 | `hvn_` | Sintético, interno ao hospital fictício | 43 | Todas as especialidades |
-| `cancergov_`, `pubmedqa_`, `seniorhealth_`, `gard_`, `ghr_`, `mplustopics_` | MedQuAD (NIH, CC BY 4.0) e PubMedQA (MIT) | 51 | Oncologia mamária |
+| `cancergov_`, `pubmedqa_`, `seniorhealth_`, `gard_`, `ghr_`, `mplustopics_` | MedQuAD (NIH, CC BY 4.0) e PubMedQA (MIT) | 50 | Oncologia mamária |
 
-**Limitação conhecida das 51 FAQs de base pública**: a tradução e o resumo para
+**Limitação conhecida das 50 FAQs de base pública**: a tradução e o resumo para
 PT-BR foram feitos com apoio de LLM, sem revisão por profissional de saúde. Há
 risco residual de imprecisão terminológica. O conteúdo é material de estudo, não
 fonte validada para uso clínico real. Isso consta do relatório técnico.

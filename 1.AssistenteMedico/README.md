@@ -23,7 +23,8 @@ Pergunta do médico + ID do paciente          |  Abertura da tela do paciente
                               │
     ├─ verifica exames pendentes (SQLite mock) e emite alerta
     ├─ [chat] classifica escopo por embeddings — recusa fora do domínio clínico
-    ├─ [chat] recupera protocolos no Chroma (RAG) e gera resposta com a LLM fine-tuned
+    ├─ [chat] recupera protocolos no Chroma, descarta os irrelevantes e gera a resposta
+    ├─ [chat] confere se os protocolos citados na resposta foram mesmo consultados
     ├─ confere a coerência etária da resposta com a idade real do paciente
     ├─ [visão geral] sintetiza anamnese/exames em RELEVANTE / ATENÇÃO (sem RAG)
     ├─ [visão geral] filtra os pontos gerados: só passa o que está ancorado no prontuário
@@ -42,16 +43,16 @@ Diagrama detalhado do grafo, com todos os nós e arestas condicionais, em [`RELA
 1.AssistenteMedico/
 ├── data/
 │   ├── raw/
-│   │   ├── faqs/            # 51 pares instrução→resposta (MedQuAD + PubMedQA traduzidos) → fine-tuning
+│   │   ├── faqs/            # 93 pares instrução→resposta (43 internos + 50 MedQuAD/PubMedQA) → fine-tuning
 │   │   ├── laudos_modelo/   # 5 modelos de laudo/parecer sintéticos → fine-tuning (formato/tom)
-│   │   ├── protocolos/      # 5 protocolos clínicos sintéticos → RAG (não entram no fine-tuning)
-│   │   └── _arquivado_sintetico_hospital_vida_nova/   # FAQs sintéticas originais, preservadas
+│   │   ├── protocolos/      # 32 protocolos clínicos sintéticos → RAG (não entram no fine-tuning)
+│   │   └── _arquivado_sintetico_hospital_vida_nova/   # FAQs de uma versão anterior, preservadas
 │   └── processed/           # dataset_train/val.jsonl + chroma/ + prontuarios_mock.db + evaluation/
 ├── finetuning/              # config, preparação do dataset, treino QLoRA (+ notebook Colab), avaliação
-├── rag/                     # embeddings E5, ingestão no Chroma, chain de geração
+├── rag/                     # embeddings E5, ingestão no Chroma, corte de relevância, chain
 ├── agent/                   # grafo LangGraph, nós, guardrails, guardrail de escopo, parsers, tools
 ├── api/                     # FastAPI
-├── tests/                   # 38 testes de lógica pura (sem carregar LLM)
+├── tests/                   # 86 testes de lógica pura (sem carregar LLM)
 └── logs/                    # audit.jsonl, gerado em runtime (git-ignorado)
 ```
 
@@ -89,7 +90,7 @@ O front-end Angular consome a API em `http://localhost:8001` — ver [`../front/
 | `GET` | `/patients/{id}/exams` | Exames do paciente com status, data de solicitação e de realização; 404 se o paciente não existir |
 | `GET` | `/exams/{id}` | Detalhe completo de um exame (resultado, médico solicitante, observações) |
 | `GET` | `/patients/{id}/anamnesis` | Ficha de anamnese completa; 404 se o paciente não existir ou não tiver anamnese |
-| `POST` | `/assistant/ask` | Pergunta livre do médico (`paciente_id` + `pergunta`) → resposta + fontes citadas + `termos_etarios_incoerentes` |
+| `POST` | `/assistant/ask` | Pergunta livre do médico (`paciente_id` + `pergunta`) → resposta + fontes citadas, `termos_etarios_incoerentes` e `citacoes_invalidas` |
 | `POST` | `/patients/{id}/overview` | Visão geral automática por IA (sem corpo) → `pontos_relevantes` / `pontos_atencao` estruturados, mais `pontos_descartados` e `geracao_degenerada` |
 
 ```bash
@@ -111,7 +112,7 @@ curl -X POST http://localhost:8001/assistant/ask \
 
 | Pasta | Conteúdo | Uso | Origem |
 |---|---|---|---|
-| `data/raw/faqs/` | 94 pares instrução→resposta | **Fine-tuning** | 43 sintéticos internos, multiespecialidade (prefixo `hvn_`) + 51 de MedQuAD (NIH, CC BY 4.0) e PubMedQA (MIT), oncologia mamária, traduzidos com apoio de LLM |
+| `data/raw/faqs/` | 93 pares instrução→resposta | **Fine-tuning** | 43 sintéticos internos, multiespecialidade (prefixo `hvn_`) + 50 de MedQuAD (NIH, CC BY 4.0) e PubMedQA (MIT), oncologia mamária, traduzidos com apoio de LLM |
 | `data/raw/laudos_modelo/` | 5 modelos de laudo/parecer/encaminhamento | **Fine-tuning** (formato e tom) | Sintético |
 | `data/raw/protocolos/` | 32 protocolos clínicos do hospital fictício, cobrindo todas as especialidades atendidas | **RAG** (conhecimento citável) | Sintético |
 | `data/processed/prontuarios_mock.db` | 32 pacientes cobrindo 30 quadros clínicos distintos (clínica médica, urgência, pneumologia, infectologia, neurologia, cirurgia, ginecologia, oncologia e outras), 38 exames, 32 anamneses completas | **Tools** (dado em tempo real) | Sintético, SQLite |
@@ -132,6 +133,7 @@ O dataset final de fine-tuning tem **98 exemplos** (84 treino / 14 validação),
 | **Guardrail de escopo** | `agent/scope_guard.py` | Antes de montar o contexto do paciente, classifica a pergunta por similaridade **relativa** de embeddings (âncoras dentro vs. fora do domínio clínico). Fora de escopo → resposta fixa em código, que nunca vê o prontuário |
 | **Guardrail de prescrição** | `agent/guardrails.py` | Filtro de padrões de prescrição direta ("prescrevo", "tome X mg"). Nunca descarta a resposta: marca `requer_validacao_humana=True` e acrescenta a ressalva |
 | **Coerência etária** | `agent/demographic_guard.py` | Sinaliza resposta ancorada numa faixa etária que não é a do paciente (conduta pediátrica para paciente idoso, por exemplo). Só dispara quando *nenhuma* faixa citada contém a idade — menção contrastiva não gera alarme |
+| **Verificação de citações** | `agent/citation_guard.py` | Sinaliza resposta que cita protocolo inexistente ou que não estava entre as fontes recuperadas. Não citar protocolo nunca é sinalizado |
 | **Filtro de ancoragem** | `agent/overview_filter.py` | Só exibe um ponto da visão geral se ele for rastreável ao prontuário do paciente. Impõe o teto de 5 itens, colapsa famílias morfológicas e descarta o bloco inteiro quando a geração degenera (`geracao_degenerada`) |
 | **Validação humana** | `agent/nodes.py::encaminhar_para_validacao_humana` | Nó dedicado no grafo — respostas sinalizadas saem com `status="aguardando_validacao_humana"` |
 | **Explainability** | `rag/chain.py` + `agent/nodes.py::log_auditoria` | Toda resposta de chat cita os protocolos recuperados; o log guarda pergunta, fontes, resposta bruta, resposta final, padrões sinalizados e as similaridades do guardrail de escopo |
@@ -153,10 +155,10 @@ Geração **greedy** (`do_sample=False`) para ser reproduzível — diferente do
 ## Testes
 
 ```bash
-python -m pytest tests/ -q     # 68 testes
+python -m pytest tests/ -q     # 86 testes
 ```
 
-Cobrem lógica pura, sem carregar LLM nem modelo de embeddings: guardrail de escopo, consolidação de bullets repetidos, parsing da visão geral, filtro de ancoragem, coerência etária e métricas de avaliação. Cada caso real observado em produção entra como regressão — a saída degenerada de 167 itens, a resposta pediátrica para paciente de 66 anos.
+Cobrem lógica pura, sem carregar LLM nem modelo de embeddings: guardrail de escopo, consolidação de bullets repetidos, parsing da visão geral, filtro de ancoragem, coerência etária, verificação de citações, corte de relevância e métricas de avaliação. Cada caso real observado em produção entra como regressão — a saída degenerada de 167 itens, a resposta pediátrica para paciente de 66 anos, as citações `SEG-01` e `PNEUMO-02`.
 
 ## Fine-tuning: GPU (recomendado) ou CPU (fallback)
 

@@ -12,6 +12,7 @@ if str(_BASE_DIR) not in sys.path:
     sys.path.insert(0, str(_BASE_DIR))
 
 from agent import tools
+from agent.citation_guard import check_citations
 from agent.demographic_guard import check_age_coherence
 from agent.guardrails import check_response
 from agent.overview_filter import filtrar_pontos
@@ -132,6 +133,7 @@ def buscar_contexto_rag_e_gerar_resposta(state: dict) -> dict:
     rag_response = rag_ask(state["pergunta"], patient_context=contexto_clinico)
     state["resposta_bruta"] = rag_response.answer
     state["fontes"] = rag_response.sources
+    state["scores_rag"] = rag_response.scores
     return state
 
 
@@ -171,6 +173,17 @@ def validar_seguranca(state: dict) -> dict:
     state["resposta_final"] = coerencia.safe_response
     state["termos_etarios_incoerentes"] = coerencia.termos_incoerentes
     state["requer_validacao_humana"] = state["requer_validacao_humana"] or coerencia.is_flagged
+
+    # Terceira checagem encadeada: a resposta cita algum protocolo que nao estava
+    # entre as fontes recuperadas? So faz sentido no chat — a visao geral nao faz
+    # retrieval, entao nao tem fonte contra a qual comparar.
+    if state.get("tipo_interacao", "chat") == "chat":
+        citacoes = check_citations(state["resposta_final"], state.get("fontes", []))
+        state["resposta_final"] = citacoes.safe_response
+        state["citacoes_invalidas"] = citacoes.citacoes_invalidas
+        state["requer_validacao_humana"] = (
+            state["requer_validacao_humana"] or citacoes.is_flagged
+        )
 
     if state.get("tipo_interacao") == "visao_geral":
         pontos_relevantes, pontos_atencao = parse_overview_sections(state["resposta_final"])
@@ -241,6 +254,8 @@ def log_auditoria(state: dict) -> dict:
         "padroes_sinalizados": state.get("padroes_sinalizados", []),
         "idade_paciente": (state.get("demografia") or {}).get("idade"),
         "termos_etarios_incoerentes": state.get("termos_etarios_incoerentes", []),
+        "citacoes_invalidas": state.get("citacoes_invalidas", []),
+        "scores_rag": state.get("scores_rag", []),
         "requer_validacao_humana": state.get("requer_validacao_humana"),
         "status": state.get("status"),
     }

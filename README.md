@@ -82,7 +82,7 @@ Acesse `http://localhost:4200`.
 ```bash
 cd 1.AssistenteMedico
 python finetuning/evaluate.py    # compara modelo base vs. fine-tuned e salva as métricas
-python -m pytest tests/ -q       # 38 testes de lógica pura (sem carregar LLM)
+python -m pytest tests/ -q       # 86 testes de lógica pura (sem carregar LLM)
 ```
 
 ## Cobertura
@@ -93,7 +93,7 @@ O escopo é hospitalar geral e as três camadas de dados acompanham esse escopo:
 |---|---|
 | Prontuário simulado | 32 pacientes · 30 quadros clínicos distintos |
 | Protocolos indexados no RAG | 32 protocolos · 122 chunks · clínica médica, urgência, pneumologia, infectologia, gastro, neuro, otorrino, oftalmo, dermato, cirurgia, oncologia e segurança do paciente |
-| Dataset de fine-tuning | 98 exemplos — 43 FAQs internas multiespecialidade + 51 de base pública (oncologia mamária) + 5 modelos de documento |
+| Dataset de fine-tuning | 98 exemplos — 43 FAQs internas multiespecialidade + 50 de base pública (oncologia mamária) + 5 modelos de documento |
 
 ## Aviso
 

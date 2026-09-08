@@ -16,7 +16,7 @@ que o modelo aprenda a citar a fonte institucional na resposta. O conteudo e de
 nivel de orientacao clinica geral e **nao contem posologia especifica** — o
 assistente e de apoio a decisao e nunca prescreve (ver `agent/guardrails.py`).
 
-## 2. Conteudo derivado de bases publicas — oncologia mamaria (51 arquivos)
+## 2. Conteudo derivado de bases publicas — oncologia mamaria (50 arquivos)
 
 Prefixos `cancergov_`, `pubmedqa_`, `seniorhealth_`, `gard_`, `ghr_`,
 `mplustopics_`. Derivado e traduzido de:

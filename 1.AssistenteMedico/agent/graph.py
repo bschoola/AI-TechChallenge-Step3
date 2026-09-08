@@ -75,6 +75,8 @@ class AgentState(TypedDict, total=False):
     requer_validacao_humana: bool
     padroes_sinalizados: list[str]
     termos_etarios_incoerentes: list[str]  # ver agent/demographic_guard.py
+    citacoes_invalidas: list[str]  # protocolos citados sem estar nas fontes recuperadas
+    scores_rag: list[float]  # similaridade dos chunks aceitos — ver rag/chain.py
     status: str
 
 

@@ -3,7 +3,7 @@ fine-tuned, retornando resposta + fontes citadas (explainability).
 """
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 
 _BASE_DIR = Path(__file__).resolve().parent.parent
@@ -15,10 +15,14 @@ from langchain_chroma import Chroma
 
 from finetuning.config import ADAPTER_OUTPUT_DIR, BASE_MODEL_NAME, CPU_DTYPE, SYSTEM_PROMPT
 from rag.embeddings import load_embeddings
+from rag.relevance import (
+    MIN_SCORE_ABSOLUTO,
+    RELATIVE_SCORE_MARGIN,
+    RETRIEVER_FETCH_K,
+    RETRIEVER_TOP_K,
+    selecionar_chunks_relevantes,
+)
 from rag.ingest import CHROMA_PERSIST_DIR
-
-# Quantos chunks recuperar por pergunta — ver PLANO_Fase3.md secao 2.4 (RAG).
-RETRIEVER_TOP_K = 4
 
 # Tamanho maximo de geracao. O chat responde UMA pergunta (400 tokens sobra); a
 # visao geral pede DOIS blocos (RELEVANTE + ATENCAO, ate 5 itens cada) e na
@@ -60,6 +64,11 @@ _chain_cache: dict | None = None
 class RagResponse:
     answer: str
     sources: list[str]
+    # Similaridades dos chunks aceitos, na ordem das fontes. Vao para o log de
+    # auditoria (agent/nodes.py::log_auditoria) para permitir recalibrar
+    # RELATIVE_SCORE_MARGIN/MIN_SCORE_ABSOLUTO com dado real, em vez de por
+    # tentativa e erro — mesma politica das similaridades do guardrail de escopo.
+    scores: list[float] = field(default_factory=list)
 
 
 def load_vectorstore() -> Chroma:
@@ -150,7 +159,12 @@ def load_llm_and_tokenizer():
         )
         return HuggingFacePipeline(pipeline=text_gen_pipeline)
 
-    llm_chat = _build_llm(CHAT_MAX_NEW_TOKENS)
+    # Os dois em geracao gulosa. Responder uma pergunta clinica a partir de um
+    # prontuario e de um protocolo nao e tarefa criativa: a variacao entre
+    # execucoes nao traz resposta melhor, atrapalha a auditoria (a mesma pergunta
+    # sobre o mesmo paciente deveria dar a mesma resposta) e, num modelo pequeno,
+    # e por onde entram as palavras coladas e malformadas observadas em uso real.
+    llm_chat = _build_llm(CHAT_MAX_NEW_TOKENS, do_sample=False)
     llm_overview = _build_llm(OVERVIEW_MAX_NEW_TOKENS, do_sample=False)
     return llm_chat, llm_overview, tokenizer
 
@@ -164,9 +178,23 @@ def _format_docs_with_sources(docs) -> str:
     return "\n\n".join(partes)
 
 
+def recuperar_chunks_relevantes(vectorstore, question: str):
+    """Busca no Chroma e devolve (documentos, scores) apos o corte de relevancia."""
+    candidatos = vectorstore.similarity_search_with_relevance_scores(
+        question, k=RETRIEVER_FETCH_K
+    )
+    selecionados = selecionar_chunks_relevantes(candidatos)
+    return [doc for doc, _ in selecionados], [score for _, score in selecionados]
+
+
 def build_rag_chain() -> dict:
-    """Monta os componentes da chain: retriever (Chroma) + llm_chat/llm_overview +
-    tokenizer.
+    """Monta os componentes da chain: vectorstore (Chroma) + llm_chat/llm_overview
+    + tokenizer.
+
+    Guarda o vectorstore, e nao um retriever ja configurado, porque a recuperacao
+    precisa das similaridades de cada chunk para aplicar o corte de relevancia
+    (ver recuperar_chunks_relevantes) — um retriever comum devolve so os
+    documentos, sem as pontuacoes.
 
     Devolvido como dicionario (nao como uma unica Runnable encadeada) porque ask()
     precisa tanto da resposta gerada quanto dos metadados de fonte dos chunks
@@ -174,10 +202,9 @@ def build_rag_chain() -> dict:
     for encadeado numa unica chain LCEL que so devolve a string final.
     """
     vectorstore = load_vectorstore()
-    retriever = vectorstore.as_retriever(search_kwargs={"k": RETRIEVER_TOP_K})
     llm_chat, llm_overview, tokenizer = load_llm_and_tokenizer()
     return {
-        "retriever": retriever,
+        "vectorstore": vectorstore,
         "llm_chat": llm_chat,
         "llm_overview": llm_overview,
         "tokenizer": tokenizer,
@@ -194,6 +221,41 @@ def _get_chain() -> dict:
     return _chain_cache
 
 
+# Formato de resposta pedido ao modelo no chat. Ate entao o prompt do chat so
+# empilhava contexto e pergunta, sem dizer NADA sobre a forma da resposta — ao
+# contrario da visao geral, que tem OVERVIEW_INSTRUCTION. O resultado observado em
+# uso real foi uma resposta que percorria os trechos recuperados comentando um por
+# um ("o protocolo X orienta...", "o protocolo Y nao especifica...", "os
+# protocolos de pneumonia tambem nao oferecem detalhes") e so no fim arriscava uma
+# conduta, contradizendo o que tinha dito antes. Um modelo pequeno que recebe uma
+# lista rotulada e nenhuma instrucao de formato tende a resenhar a lista.
+#
+# As regras abaixo atacam cada defeito observado, na ordem em que apareceram.
+CHAT_INSTRUCTION = (
+    "Responda a pergunta do medico seguindo estas regras:\n"
+    "1. Comece pela conduta sugerida, em UMA frase direta. Nao comece descrevendo "
+    "protocolos.\n"
+    "2. Depois, em ate 3 frases, justifique a partir dos dados do paciente e do "
+    "protocolo aplicavel.\n"
+    "3. Cite apenas protocolos que realmente tratam do caso, pelo nome exato que "
+    "aparece no contexto. NAO comente protocolos que nao se aplicam e NAO invente "
+    "nomes ou codigos de protocolo.\n"
+    "4. Nao contradiga os dados do paciente. Se a ficha diz que um sinal esta "
+    "ausente, nao afirme que ele esta presente.\n"
+    "5. Sustente uma unica conduta. Nao sugira uma conduta e depois outra "
+    "incompativel com ela.\n"
+    "6. Se houver sinais de alerta que mudariam a conduta, liste-os ao final em "
+    "uma frase.\n"
+    "7. Se o contexto nao for suficiente para responder, diga isso e pare."
+)
+
+_SEM_PROTOCOLO_APLICAVEL = (
+    "Nenhum protocolo interno recuperado trata especificamente desta pergunta. "
+    "Responda apenas com base nos dados do paciente e deixe claro que nao ha "
+    "protocolo institucional aplicavel."
+)
+
+
 def ask(question: str, patient_context: str | None = None) -> RagResponse:
     """Ponto de entrada usado pelo no `buscar_contexto_rag_e_gerar_resposta` do
     LangGraph (agent/nodes.py).
@@ -202,17 +264,20 @@ def ask(question: str, patient_context: str | None = None) -> RagResponse:
     injetados no prompt junto do contexto recuperado do RAG.
     """
     chain = _get_chain()
-    retriever = chain["retriever"]
     llm = chain["llm_chat"]
     tokenizer = chain["tokenizer"]
 
-    docs = retriever.invoke(question)
-    contexto_rag = _format_docs_with_sources(docs)
+    docs, scores = recuperar_chunks_relevantes(chain["vectorstore"], question)
 
-    user_content = f"Contexto (protocolos internos):\n{contexto_rag}\n\n"
+    if docs:
+        contexto_rag = _format_docs_with_sources(docs)
+        user_content = f"Contexto (protocolos internos):\n{contexto_rag}\n\n"
+    else:
+        user_content = f"Contexto (protocolos internos):\n{_SEM_PROTOCOLO_APLICAVEL}\n\n"
+
     if patient_context:
-        user_content += f"Historico do paciente:\n{patient_context}\n\n"
-    user_content += f"Pergunta: {question}"
+        user_content += f"Dados do paciente:\n{patient_context}\n\n"
+    user_content += f"Pergunta: {question}\n\n{CHAT_INSTRUCTION}"
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -227,7 +292,9 @@ def ask(question: str, patient_context: str | None = None) -> RagResponse:
     resposta = llm.invoke(prompt)
 
     fontes = sorted({doc.metadata.get("fonte", "desconhecida") for doc in docs})
-    return RagResponse(answer=resposta.strip(), sources=fontes)
+    return RagResponse(
+        answer=resposta.strip(), sources=fontes, scores=[round(s, 4) for s in scores]
+    )
 
 
 # Formato de saida pedido para a "visao geral" automatica (agent/nodes.py::
