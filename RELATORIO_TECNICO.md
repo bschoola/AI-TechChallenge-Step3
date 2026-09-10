@@ -7,12 +7,12 @@ Repositório: `AI-TechChallenge-Step3`
 
 ## Sumário
 
-1. [Visão geral do sistema](#1-visão-geral-do-sistema)
+1. [Visão geral do sistema](#1-visao-geral-do-sistema)
 2. [Processo de fine-tuning](#2-processo-de-fine-tuning)
-3. [Descrição do assistente médico](#3-descrição-do-assistente-médico)
-4. [Diagrama do fluxo LangChain / LangGraph](#4-diagrama-do-fluxo-langchain--langgraph)
-5. [Avaliação do modelo e análise dos resultados](#5-avaliação-do-modelo-e-análise-dos-resultados)
-6. [Referências e licenças](#6-referências-e-licenças)
+3. [Descrição do assistente médico](#3-descricao-do-assistente-medico)
+4. [Diagrama do fluxo LangChain / LangGraph](#4-diagrama-do-fluxo-langchain-langgraph)
+5. [Avaliação do modelo e análise dos resultados](#5-avaliacao-do-modelo-e-analise-dos-resultados)
+6. [Referências e licenças](#6-referencias-e-licencas)
 
 ---
 
@@ -271,7 +271,7 @@ Cada protocolo é estruturado em torno dos pontos que mudam a conduta: critério
 
 Nenhum protocolo contém posologia específica, porque o assistente é de apoio à decisão e não prescreve.
 
-**Reindexação.** O `rag/ingest.py` reconstrói o índice do zero a cada execução, pela função `reset_vectorstore`. Isso é necessário porque o `Chroma.from_documents` sobre um `persist_directory` existente **acrescenta** documentos à coleção em vez de substituí-los. Sem o reset, cada execução da ingestão duplica todos os chunks, e o efeito na recuperação é silencioso e grave. A [seção 5.4](#54-qualidade-da-recuperação-rag) mostra a medição.
+**Reindexação.** O `rag/ingest.py` reconstrói o índice do zero a cada execução, pela função `reset_vectorstore`. Isso é necessário porque o `Chroma.from_documents` sobre um `persist_directory` existente **acrescenta** documentos à coleção em vez de substituí-los. Sem o reset, cada execução da ingestão duplica todos os chunks, e o efeito na recuperação é silencioso e grave. A [seção 5.4](#54-qualidade-da-recuperacao-rag) mostra a medição.
 
 ### 3.5 API
 
@@ -453,7 +453,7 @@ sequenceDiagram
 
 A avaliação tem duas frentes. A primeira é a **comparação quantitativa** entre o modelo base e o modelo treinado. A segunda é a **medição do comportamento do sistema em operação**, a partir das 68 interações registradas no log de auditoria.
 
-As medições de operação das seções 5.3 a 5.7 foram obtidas com a base de protocolos e o adapter anteriores à ampliação para as demais especialidades. Elas continuam válidas como caracterização das camadas que não mudaram, como o guardrail de escopo, o parsing e a auditoria, e como diagnóstico da configuração de recuperação. A [seção 5.9](#59-estado-de-medição) registra o que precisa ser medido de novo depois do re-treino e da reindexação.
+As medições de operação das seções 5.3 a 5.7 foram obtidas com a base de protocolos e o adapter anteriores à ampliação para as demais especialidades. Elas continuam válidas como caracterização das camadas que não mudaram, como o guardrail de escopo, o parsing e a auditoria, e como diagnóstico da configuração de recuperação. A [seção 5.9](#59-estado-de-medicao) registra o que precisa ser medido de novo depois do re-treino e da reindexação.
 
 ### 5.1 Metodologia da comparação base vs. fine-tuned
 
