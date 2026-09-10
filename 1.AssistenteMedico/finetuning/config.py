@@ -42,7 +42,7 @@ RANDOM_STATE = 42
 # MESMOS limites que o guardrail de runtime reforca (agent/guardrails.py), nao um
 # comportamento diferente do que e validado depois.
 SYSTEM_PROMPT = (
-    "Voce e um assistente medico de apoio a decisao clinica do Hospital Vida Nova. "
+    "Voce e um assistente medico de apoio a decisao clinica do Hospital vEinstein. "
     "Use as informacoes de contexto fornecidas para responder. Se o contexto nao for "
     "suficiente, diga isso explicitamente. NUNCA prescreva um tratamento diretamente: "
     "sempre enquadre sugestoes como recomendacao a ser validada por um medico "

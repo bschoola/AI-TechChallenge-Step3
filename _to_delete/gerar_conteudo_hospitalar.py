@@ -1,7 +1,7 @@
 """Gera os protocolos internos (RAG) e as FAQs (fine-tuning) das demais
 especialidades do hospital, alem da oncologia mamaria ja existente.
 
-Conteudo sintetico do hospital ficticio "Hospital Vida Nova", em nivel de
+Conteudo sintetico do hospital ficticio "Hospital vEinstein", em nivel de
 orientacao clinica geral. Nao contem posologia especifica: o assistente e de
 apoio a decisao e nunca prescreve — ver agent/guardrails.py.
 
@@ -488,7 +488,7 @@ Este protocolo orienta a sugestao do assistente virtual; a indicacao de exames e
 
 # ---------------------------------------------------------------------------
 # FAQs — pares instrucao->resposta para o fine-tuning
-# Prefixo hvn_ = Hospital Vida Nova (conteudo sintetico interno), para
+# Prefixo hvn_ = Hospital vEinstein (conteudo sintetico interno), para
 # distinguir das FAQs derivadas de MedQuAD/PubMedQA (prefixos cancergov_,
 # pubmedqa_, seniorhealth_, gard_, ghr_, mplustopics_).
 # ---------------------------------------------------------------------------

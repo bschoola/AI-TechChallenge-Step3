@@ -16,9 +16,9 @@ pastas acima cobrem, juntas, os quadros clínicos presentes no prontuário
 simulado (`data/processed/prontuarios_mock.db`, 32 pacientes / 30 quadros
 distintos).
 
-## `protocolos/` — base de conhecimento do RAG (32 arquivos)
+## `protocolos/`: base de conhecimento do RAG (32 arquivos)
 
-Protocolos internos sintéticos do "Hospital Vida Nova", indexados por
+Protocolos internos sintéticos do "Hospital vEinstein", indexados por
 `rag/ingest.py` no Chroma. **Não entram no fine-tuning**: são conhecimento a
 consultar e citar, e treinar o modelo neles destruiria a rastreabilidade que o
 requisito de explainability exige.
@@ -44,11 +44,11 @@ prescrição (`agent/guardrails.py`).
 > **Reindexação.** `rag/ingest.py` reconstrói o índice do zero a cada execução
 > (`reset_vectorstore`). Isso é intencional: `Chroma.from_documents` sobre um
 > `persist_directory` existente **acrescenta** documentos em vez de substituí-los,
-> e executar a ingestão repetidamente duplicava todos os chunks — o que corrompia
+> e executar a ingestão repetidamente duplicava todos os chunks, o que corrompia
 > silenciosamente a recuperação, fazendo o retriever devolver N cópias do mesmo
 > trecho em vez de N trechos distintos.
 
-## `faqs/` — dataset de fine-tuning (93 arquivos)
+## `faqs/`: dataset de fine-tuning (93 arquivos)
 
 Duas origens, identificáveis pelo prefixo do nome. Detalhe e atribuição de
 licença em [`faqs/_FONTE.md`](faqs/_FONTE.md).
@@ -63,7 +63,7 @@ PT-BR foram feitos com apoio de LLM, sem revisão por profissional de saúde. H�
 risco residual de imprecisão terminológica. O conteúdo é material de estudo, não
 fonte validada para uso clínico real. Isso consta do relatório técnico.
 
-## `laudos_modelo/` — formato de documentos (5 arquivos)
+## `laudos_modelo/`: formato de documentos (5 arquivos)
 
 Modelos de laudo, parecer, encaminhamento e orientação pós-procedimento. Entram
 no fine-tuning para ensinar **estrutura e tom** de documento institucional, não

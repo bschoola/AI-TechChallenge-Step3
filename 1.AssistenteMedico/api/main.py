@@ -32,7 +32,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Assistente Medico Virtual — OncoTech Fase 3",
+    title="Assistente Medico Virtual — Fase 3",
     lifespan=lifespan,
 )
 

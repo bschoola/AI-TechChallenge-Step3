@@ -1,6 +1,6 @@
 # Plano Técnico — Tech Challenge Fase 3: Assistente Médico Virtual
 
-> Continuação do projeto **OncoTech** (fases anteriores — Algoritmo Genético, API de Predição + LLM, Frontend Angular — já entregues e avaliadas; os artefatos dessas fases foram removidos deste repositório após a entrega, que agora contém só o módulo da Fase 3). Este documento planeja o assistente médico virtual com fine-tuning de LLM, LangChain e LangGraph.
+> Continuação do projeto (fases anteriores — Algoritmo Genético, API de Predição + LLM, Frontend Angular — já entregues e avaliadas; os artefatos dessas fases foram removidos deste repositório após a entrega, que agora contém só o módulo da Fase 3). Este documento planeja o assistente médico virtual com fine-tuning de LLM, LangChain e LangGraph.
 
 Data do plano: 23/08/2026 · Prazo assumido: 2 a 4 semanas · Sem GPU dedicada disponível (uso de Colab gratuito / CPU).
 
@@ -107,7 +107,7 @@ Sem acesso a sistema hospitalar real, simulamos com **SQLite** (`data/prontuario
 
 **Atualização de 05/09/2026 — decisão final tomada pelo usuário:** ao invés de usar
 PubMedQA/MedQuAD apenas como complemento opcional, o usuário optou por
-**substituir totalmente** as FAQs sintéticas do Hospital Vida Nova por pares
+**substituir totalmente** as FAQs sintéticas do Hospital vEinstein por pares
 instrução→resposta reais, traduzidos e resumidos a partir dessas duas bases
 (50 pares, filtrados para oncologia mamária). Motivo: usar diretamente as
 bases sugeridas pela FIAP em vez de dado sintético. Os protocolos (RAG) e os
@@ -122,9 +122,9 @@ Composição final de `data/raw/`:
 
 | Conjunto | Tamanho | Origem | Uso |
 |---|---|---|---|
-| Protocolos clínicos fictícios | 30–50 documentos | Sintético (Hospital Vida Nova) | Indexados no RAG (Chroma) |
+| Protocolos clínicos fictícios | 30–50 documentos | Sintético (Hospital vEinstein) | Indexados no RAG (Chroma) |
 | FAQs instrução→resposta (oncologia mamária) | 50 pares | Traduzido/resumido de MedQuAD (CC BY 4.0) e PubMedQA (MIT) | Fine-tuning |
-| Modelos de laudo/receita fictícios | 5 exemplos | Sintético (Hospital Vida Nova) | Fine-tuning (ensina formato/tom) |
+| Modelos de laudo/receita fictícios | 5 exemplos | Sintético (Hospital vEinstein) | Fine-tuning (ensina formato/tom) |
 
 Formato de treino: JSONL, um exemplo por linha (mantido inalterado):
 ```json
