@@ -18,7 +18,7 @@ Repositório: `AI-TechChallenge-Step3`
 
 ## 1. Visão geral do sistema
 
-O sistema é um **assistente médico virtual de apoio à decisão clínica**. Ele atende **todas as especialidades** de um hospital fictício, o "Hospital vEinstein", cujo painel médico é apresentado sob a marca "Hospital VEinstein".
+O sistema é um **assistente médico virtual de apoio à decisão clínica**. Ele atende **todas as especialidades** de um hospital fictício, o Hospital VEinstein.
 
 O assistente não substitui o julgamento clínico. Ele organiza a informação do prontuário, recupera protocolos internos e redige respostas que precisam ser validadas por um profissional habilitado.
 
@@ -60,7 +60,7 @@ Esse tipo de ajuste envolve formato e tom, com pouco conteúdo novo. É justamen
 
 ### 2.2 Dataset
 
-O dataset de fine-tuning é montado a partir de duas pastas em `data/raw/`. Uma terceira pasta, `protocolos/`, alimenta apenas o RAG e não participa do treino:
+Duas pastas em `data/raw/`, `faqs/` e `laudos_modelo/`, alimentam o fine-tuning. Uma terceira pasta, `protocolos/`, tem um objetivo diferente: alimenta só o RAG e não entra no treino.
 
 | Fonte | Arquivos | Papel | Origem |
 |---|---:|---|---|
@@ -123,7 +123,7 @@ Características da implementação:
 
 ### 2.4 Configuração do treino
 
-**Modelo base: `Qwen/Qwen2.5-1.5B-Instruct`.** A escolha atende a três restrições ao mesmo tempo: licença Apache 2.0 sem gate de acesso, suporte multilíngue real ao português e capacidade de rodar em QLoRA 4-bit na GPU T4 do Colab gratuito.
+**Modelo base: `Qwen/Qwen2.5-1.5B-Instruct`.** A escolha atende a três restrições ao mesmo tempo: licença Apache 2.0 sem gate de acesso, suporte multilíngue real ao português e capacidade de rodar em QLoRA 4-bit numa GPU comum.
 
 Em **QLoRA**, o modelo base é quantizado em 4 bits (NF4, com dupla quantização) e congelado. Apenas os adaptadores de baixo posto (LoRA) recebem gradiente.
 
@@ -149,9 +149,9 @@ O conteúdo do system prompt descreve os mesmos limites que o guardrail de runti
 
 ### 2.5 Execução e artefato
 
-O treino roda na **GPU T4 gratuita do Google Colab** (`finetuning/train_qlora_colab.ipynb`), com o adapter salvo no Google Drive a cada época. A stack é `transformers`, `peft` 0.20, `trl` 1.12 (`SFTTrainer`), `bitsandbytes` e `accelerate`.
+O treino roda localmente, com o script `finetuning/train_qlora.py`. A stack é `transformers`, `peft` 0.20, `trl` 1.12 (`SFTTrainer`), `bitsandbytes` e `accelerate`.
 
-O script `finetuning/train_qlora.py` também roda **localmente sem GPU**. Ele detecta a ausência de CUDA e carrega o modelo sem quantização em bfloat16, o que é LoRA e não QLoRA, já que o `bitsandbytes` 4-bit exige CUDA. Nesse caminho, o *gradient checkpointing* é habilitado para compensar a memória. O dtype de computação em GPU é resolvido automaticamente: bfloat16 em Ampere ou superior, e float16 na T4, que não suporta bf16 nativamente.
+Sem GPU, o script detecta a ausência de CUDA e carrega o modelo sem quantização em bfloat16. Isso é LoRA e não QLoRA, já que o `bitsandbytes` 4-bit exige CUDA. Nesse caminho, o *gradient checkpointing* é habilitado para compensar a memória. Com GPU, o dtype de computação é resolvido automaticamente: bfloat16 em Ampere ou superior, e float16 em GPUs mais antigas, que não suportam bf16 nativamente.
 
 **Artefato final:** a pasta `finetuning/adapters/cancer-assistant-lora/`, com o adapter LoRA de 17,4 MB, o tokenizer e o chat template. O modelo base não é redistribuído. Ele é baixado do Hugging Face na primeira execução.
 
@@ -695,7 +695,7 @@ O dataset e a base de protocolos foram ampliados para cobrir todas as especialid
 
 ```bash
 python rag/ingest.py              # reindexa os 32 protocolos em 122 chunks
-python finetuning/train_qlora.py  # ou o notebook Colab: re-treina com os 84 exemplos
+python finetuning/train_qlora.py  # re-treina com os 84 exemplos
 python finetuning/evaluate.py     # preenche a tabela de 5.2
 ```
 
