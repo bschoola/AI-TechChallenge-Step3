@@ -487,13 +487,13 @@ python finetuning/evaluate.py
 
 ### 5.2 Resultados da comparação
 
-| Métrica | Base | Fine-tuned | Δ |
-|---|---:|---:|---:|
-| Similaridade com a referência | _a preencher_ | _a preencher_ | |
-| Taxa de acionamento do guardrail | _a preencher_ | _a preencher_ | |
-| Taxa de ressalva de validação | _a preencher_ | _a preencher_ | |
-| Trigramas distintos | _a preencher_ | _a preencher_ | |
-| Comprimento médio (palavras) | _a preencher_ | _a preencher_ | |
+| Métrica | Base | Fine-tuned | Δ | Melhor |
+|---|---:|---:|---:|:--:|
+| Similaridade com a referência (cosseno E5) | 0.8993 | 0.9013 | +0.002 | maior |
+| Taxa de respostas sinalizadas pelo guardrail | 0.0 | 0.0 | +0.0 | menor |
+| Taxa de respostas com ressalva de validação humana | 0.2857 | 0.2143 | -0.0714 | maior |
+| Trigramas distintos (1.0 = sem repetição) | 0.9468 | 0.9389 | -0.0079 | maior |
+| Comprimento médio (palavras) | 189.8 | 107.1 | -82.7 | neutra |
 
 **Hipóteses declaradas antes da execução**, para que o resultado seja interpretável e não retroajustado:
 
@@ -523,7 +523,7 @@ O guardrail resolve o caso comum, mas sem folga de decisão. As três similarida
 
 ### 5.4 Qualidade da recuperação (RAG)
 
-Distribuição das fontes citadas nas 35 recuperações registradas:
+Distribuição das fontes citadas nas 34 recuperações registradas:
 
 | Protocolo | Vezes citado |
 |---|---:|
