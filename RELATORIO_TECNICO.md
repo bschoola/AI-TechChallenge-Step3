@@ -489,11 +489,11 @@ python finetuning/evaluate.py
 
 | Métrica | Base | Fine-tuned | Δ | Melhor |
 |---|---:|---:|---:|:--:|
-| Similaridade com a referência (cosseno E5) | 0.8993 | 0.9013 | +0.002 | maior |
-| Taxa de respostas sinalizadas pelo guardrail | 0.0 | 0.0 | +0.0 | menor |
-| Taxa de respostas com ressalva de validação humana | 0.2857 | 0.2143 | -0.0714 | maior |
-| Trigramas distintos (1.0 = sem repetição) | 0.9468 | 0.9389 | -0.0079 | maior |
-| Comprimento médio (palavras) | 189.8 | 107.1 | -82.7 | neutra |
+| Similaridade com a referência (cosseno E5) | 0,8993 | 0,9013 | +0,002 | maior |
+| Taxa de respostas sinalizadas pelo guardrail | 0,0 | 0,0 | +0,0 | menor |
+| Taxa de respostas com ressalva de validação humana | 0,2857 | 0,2143 | -0,0714 | maior |
+| Trigramas distintos (1.0 = sem repetição) | 0,9468 | 0,9389 | -0,0079 | maior |
+| Comprimento médio (palavras) | 189,8 | 107,1 | -82,7 | neutra |
 
 **Hipóteses declaradas antes da execução**, para que o resultado seja interpretável e não retroajustado:
 
@@ -501,6 +501,12 @@ python finetuning/evaluate.py
 2. O **comprimento médio** deve cair. As respostas de referência têm 96 palavras em média, bem menos do que o modelo base produz espontaneamente.
 3. A **similaridade com a referência** deve subir modestamente. Uma subida grande seria indício de memorização, e não de generalização, com um dataset deste tamanho.
 4. Os **trigramas distintos** podem cair no modelo treinado, porque fine-tuning em dataset pequeno aumenta a propensão a repetição.
+
+**Análise.** Três das quatro hipóteses se confirmam na direção esperada. O comprimento médio cai de 189,8 para 107,1 palavras, a maior variação da tabela, e se aproxima das 96 palavras da resposta de referência. A similaridade com a referência sobe de 0,8993 para 0,9013. A subida é pequena, como previsto pelo piso alto do embedding descrito na seção 5.1. Os trigramas distintos caem de 0,9468 para 0,9389, uma queda leve, dentro do que a hipótese 4 previa como possível, não como certo.
+
+A hipótese sobre a taxa de ressalva não se confirma. Ela cai de 0,2857 para 0,2143, na direção oposta à esperada. O comportamento mais diretamente ensinado pelo system prompt não aparece com mais frequência no modelo treinado. Uma hipótese é o corte de comprimento: a resposta fine-tuned é bem mais curta, e frases de ressalva podem estar entre o texto que deixou de ser gerado. Essa hipótese não foi verificada nos dados disponíveis.
+
+A taxa de guardrail fica em 0,0 nos dois modelos. Nenhuma das 14 perguntas de validação aciona o filtro de prescrição, em nenhum dos dois lados, então essa métrica não separa base de fine-tuned neste conjunto de teste.
 
 ### 5.3 Guardrail de escopo
 
@@ -661,7 +667,7 @@ Das 68 interações registradas, sobre 7 pacientes distintos:
 | Guardrail de prescrição | ⚠️ Não exercitado | 0 acionamentos em 68 interações |
 | Conduta em faixa etária errada | ⚠️ Sinalizada, não bloqueada | A checagem de coerência etária marca para validação humana |
 | Geração de conteúdo fabricado | ❌ Limitação do modelo | A alucinação ocorre. É contida na exibição, não na origem |
-| Comparação base vs. fine-tuned | ⏳ Script pronto, execução pendente | `finetuning/evaluate.py` |
+| Comparação base vs. fine-tuned | ✅ Concluída | Ressalva cai, na direção oposta à hipótese. Comprimento, similaridade e trigramas confirmam a direção prevista, conforme 5.2 |
 
 **Limitações:**
 
@@ -703,7 +709,7 @@ python finetuning/evaluate.py     # preenche a tabela de 5.2
 
 | Medição | Situação |
 |---|---|
-| Comparação base vs. fine-tuned (5.2) | Pendente da execução do `evaluate.py` sobre o adapter re-treinado |
+| Comparação base vs. fine-tuned (5.2) | Concluída, sobre o adapter re-treinado com os 84 exemplos |
 | Guardrail de escopo (5.3) | Válida. O `agent/scope_guard.py`, as âncoras e o modelo de embeddings não mudaram |
 | Distribuição de fontes (5.4) | A refazer depois da reindexação. A análise de causa permanece válida. Medir também quantas perguntas passam a cair no caso "sem protocolo aplicável" |
 | Estabilidade e parsing (5.5) | A refazer, porque o teto de tokens e a decodificação foram alterados |
