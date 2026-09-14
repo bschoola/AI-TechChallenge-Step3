@@ -3,6 +3,15 @@
 **Tech Challenge, Fase 3. Pós-graduação em Inteligência Artificial (FIAP)**
 Repositório: `AI-TechChallenge-Step3`
 
+**Integrantes**
+
+| Nome | RM |
+|---|---|
+| Bruno Gouveia Schoola | RM370940 |
+| Ricardo Stebulaitis | RM370939 |
+
+**Vídeo de apresentação:** [https://www.youtube.com/watch?v=_1xZJCxCpRE](https://www.youtube.com/watch?v=_1xZJCxCpRE)
+
 ---
 
 ## Sumário
